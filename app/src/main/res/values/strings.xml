@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MINtv</string>
+    <string name="brand_name">MAXtv</string>
+    <string name="brand_accent">lite</string>
+
+    <!-- Channel list -->
+    <string name="channels_title">TV kanali</string>
+    <string name="status_loading">Učitavanje kanala…</string>
+    <string name="status_refreshing">Osvježavanje…</string>
+    <plurals name="status_live">
+        <item quantity="one">%1$d kanal · uživo</item>
+        <item quantity="few">%1$d kanala · uživo</item>
+        <item quantity="other">%1$d kanala · uživo</item>
+    </plurals>
+    <plurals name="status_cached">
+        <item quantity="one">Predmemorija · %1$d kanal</item>
+        <item quantity="few">Predmemorija · %1$d kanala</item>
+        <item quantity="other">Predmemorija · %1$d kanala</item>
+    </plurals>
+    <plurals name="status_offline">
+        <item quantity="one">Izvan mreže · predmemorija · %1$d kanal</item>
+        <item quantity="few">Izvan mreže · predmemorija · %1$d kanala</item>
+        <item quantity="other">Izvan mreže · predmemorija · %1$d kanala</item>
+    </plurals>
+    <string name="status_offline_short">Izvan mreže · predmemorija</string>
+    <string name="action_sign_in">Prijava</string>
+    <string name="action_refresh">Osvježi</string>
+    <string name="action_demo">Test player</string>
+    <string name="action_retry">Pokušaj ponovno</string>
+    <string name="error_title">Kanali nisu dostupni</string>
+    <string name="error_message">Provjeri vezu s internetom i pokušaj ponovno.</string>
+    <string name="error_no_stream">Ovaj kanal nema DASH adresu.</string>
+    <string name="channel_description">%1$s, kanal %2$d</string>
+    <string name="badge_free">FREE</string>
+    <string name="channel_footer_hint">Odaberi kanal · OK za reprodukciju</string>
+    <string name="channel_footer_version">v0.1 · neovisni klijent</string>
+    <string name="footer_signed_in">Prijavljen: %1$s</string>
+
+    <!-- Login -->
+    <string name="login_title">Prijava na MAXtv</string>
+    <string name="login_subtitle">Prijavi se svojim MAXtv računom.</string>
+    <string name="login_stub_note">Povezivanje sa sustavom MAXtv još nije aktivno. Javni kanali rade bez prijave.</string>
+    <string name="label_username">Korisničko ime</string>
+    <string name="label_password">Lozinka</string>
+    <string name="hint_username">npr. korisnik@primjer.hr</string>
+    <string name="hint_password">Lozinka</string>
+    <string name="remember_password">Zapamti lozinku</string>
+    <string name="action_login">Prijavi se</string>
+    <string name="login_missing_fields">Upiši korisničko ime i lozinku.</string>
+    <string name="login_in_progress">Prijava u tijeku…</string>
+    <string name="login_stub_error">Prijava još nije implementirana. Protokol se povezuje u MaxTvApi.</string>
+    <string name="login_success">Prijava uspješna.</string>
+    <string name="login_back_hint">Natrag za povratak na kanale</string>
+
+    <!-- Player -->
+    <string name="player_title_fallback">Reprodukcija</string>
+    <string name="player_live">UŽIVO</string>
+    <string name="player_paused">PAUZA</string>
+    <string name="player_loading">UČITAVANJE</string>
+    <string name="player_hint">OK: play/pauza   ◀ ▶: −/+ 10 s   Natrag: izlaz</string>
+    <string name="player_error_title">Reprodukcija nije moguća</string>
+    <string name="player_error_generic">Stream se ne može otvoriti. Pokušaj ponovno.</string>
+    <string name="player_seek_back">−10 s</string>
+    <string name="player_seek_forward">+10 s</string>
+    <string name="player_demo_title">Tears of Steel</string>
+    <string name="player_demo_subtitle">Javni DASH test · Unified Streaming</string>
+    <string name="player_channel_subtitle">Kanal %1$d · %2$s</string>
+    <string name="vpn_warning">VPN is on — MAXtv blocks playback over VPN. Turn it off to watch.</string>
+    <string name="status_starting">Starting channel…</string>
+    <string name="status_playback_failed">Playback error: %s</string>
+    <string name="error_sign_in_required">Sign in to watch subscription channels.</string>
+    <string name="action_epg">EPG</string>
+    <string name="epg_hint">DPAD: move · OK: watch · BACK: back</string>
+    <string name="epg_loading">Loading EPG…</string>
+    <string name="epg_no_programmes">No programme data for this channel.</string>
+    <string name="error_catchup_unavailable">This programme is not available for catch-up.</string>
+    <string name="error_programme_not_started">This programme has not started yet.</string>
+    <string name="quality_auto">Quality: Auto</string>
+    <string name="quality_max">Quality: Max</string>
+    <string name="quality_saver">Quality: 720p</string>
+    <string name="quality_applies_next">Quality applies to the next channel you open.</string>
+</resources>

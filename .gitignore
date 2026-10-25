@@ -1,0 +1,21 @@
+# Gradle
+.gradle/
+build/
+app/build/
+
+# Android Studio / IDEA
+.idea/
+*.iml
+captures/
+
+# Local machine config (SDK path)
+local.properties
+
+# Signing
+*.jks
+*.keystore
+keystore.properties
+
+# OS noise
+.DS_Store
+Thumbs.db

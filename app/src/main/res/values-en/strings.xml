@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MINtv</string>
+    <string name="brand_name">MAXtv</string>
+    <string name="brand_accent">lite</string>
+
+    <string name="channels_title">TV channels</string>
+    <string name="status_loading">Loading channels…</string>
+    <string name="status_refreshing">Refreshing…</string>
+    <plurals name="status_live">
+        <item quantity="one">%1$d channel · live</item>
+        <item quantity="other">%1$d channels · live</item>
+    </plurals>
+    <plurals name="status_cached">
+        <item quantity="one">Cache · %1$d channel</item>
+        <item quantity="other">Cache · %1$d channels</item>
+    </plurals>
+    <plurals name="status_offline">
+        <item quantity="one">Offline · cache · %1$d channel</item>
+        <item quantity="other">Offline · cache · %1$d channels</item>
+    </plurals>
+    <string name="status_offline_short">Offline · cache</string>
+    <string name="action_sign_in">Sign in</string>
+    <string name="action_refresh">Refresh</string>
+    <string name="action_demo">Test player</string>
+    <string name="action_retry">Try again</string>
+    <string name="error_title">Channels unavailable</string>
+    <string name="error_message">Check your internet connection and try again.</string>
+    <string name="error_no_stream">This channel has no DASH URL.</string>
+    <string name="channel_description">%1$s, channel %2$d</string>
+    <string name="badge_free">FREE</string>
+    <string name="channel_footer_hint">Pick a channel · OK to play</string>
+    <string name="channel_footer_version">v0.1 · independent client</string>
+    <string name="footer_signed_in">Signed in: %1$s</string>
+
+    <string name="login_title">Sign in to MAXtv</string>
+    <string name="login_subtitle">Use your MAXtv account.</string>
+    <string name="login_stub_note">The MAXtv login protocol is not connected yet. Public channels work without signing in.</string>
+    <string name="label_username">Username</string>
+    <string name="label_password">Password</string>
+    <string name="hint_username">e.g. user@example.com</string>
+    <string name="hint_password">Password</string>
+    <string name="remember_password">Remember password</string>
+    <string name="action_login">Sign in</string>
+    <string name="login_missing_fields">Enter your username and password.</string>
+    <string name="login_in_progress">Signing in…</string>
+    <string name="login_stub_error">Login is not implemented yet. The protocol is wired in MaxTvApi.</string>
+    <string name="login_success">Signed in.</string>
+    <string name="login_back_hint">Back to return to channels</string>
+
+    <string name="player_title_fallback">Playback</string>
+    <string name="player_live">LIVE</string>
+    <string name="player_paused">PAUSED</string>
+    <string name="player_loading">LOADING</string>
+    <string name="player_hint">OK: play/pause   ◀ ▶: −/+ 10 s   Back: exit</string>
+    <string name="player_error_title">Playback failed</string>
+    <string name="player_error_generic">The stream could not be opened. Try again.</string>
+    <string name="player_seek_back">−10 s</string>
+    <string name="player_seek_forward">+10 s</string>
+    <string name="player_demo_title">Tears of Steel</string>
+    <string name="player_demo_subtitle">Public DASH test · Unified Streaming</string>
+    <string name="player_channel_subtitle">Channel %1$d · %2$s</string>
+</resources>
