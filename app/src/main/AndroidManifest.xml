@@ -19,7 +19,7 @@
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.MaxTvLite"
+        android:theme="@style/Theme.MinTvLite"
         android:usesCleartextTraffic="false">
 
         <!--

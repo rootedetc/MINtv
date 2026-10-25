@@ -50,7 +50,7 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 
 ## Notes
 
-- The app is `local.maxtv.lite` on device. Rename the application id before publishing
+- The app is `local.mintv` on device. Rename the application id before publishing
   anywhere.
 - Keys and constants that are published by the service's own web client are bundled so the
   app can talk to it; no private keys of ours are involved.

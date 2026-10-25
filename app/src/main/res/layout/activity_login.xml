@@ -73,7 +73,7 @@
                     android:textSize="13sp" />
 
                 <TextView
-                    style="@style/Text.MaxTv.Label"
+                    style="@style/Text.MinTv.Label"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="18dp"
@@ -81,7 +81,7 @@
 
                 <EditText
                     android:id="@+id/input_username"
-                    style="@style/Text.MaxTv.Input"
+                    style="@style/Text.MinTv.Input"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
@@ -92,7 +92,7 @@
                     android:nextFocusForward="@+id/input_password" />
 
                 <TextView
-                    style="@style/Text.MaxTv.Label"
+                    style="@style/Text.MinTv.Label"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
@@ -100,7 +100,7 @@
 
                 <EditText
                     android:id="@+id/input_password"
-                    style="@style/Text.MaxTv.Input"
+                    style="@style/Text.MinTv.Input"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
@@ -133,7 +133,7 @@
 
                     <Button
                         android:id="@+id/button_login"
-                        style="@style/Widget.MaxTv.Button.Accent"
+                        style="@style/Widget.MinTv.Button.Accent"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:minHeight="46dp"

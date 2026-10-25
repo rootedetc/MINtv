@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace 'local.maxtv.lite'
+    namespace 'local.mintv'
     compileSdk 34
 
     defaultConfig {
-        applicationId "local.maxtv.lite"
+        applicationId "local.mintv"
         minSdk 26
         targetSdk 34
         versionCode 1

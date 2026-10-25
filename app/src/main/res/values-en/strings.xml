@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">MINtv</string>
-    <string name="brand_name">MAXtv</string>
-    <string name="brand_accent">lite</string>
+    <string name="brand_name">MIN</string>
+    <string name="brand_accent">tv</string>
 
     <string name="channels_title">TV channels</string>
     <string name="status_loading">Loading channels…</string>
@@ -44,7 +44,7 @@
     <string name="action_login">Sign in</string>
     <string name="login_missing_fields">Enter your username and password.</string>
     <string name="login_in_progress">Signing in…</string>
-    <string name="login_stub_error">Login is not implemented yet. The protocol is wired in MaxTvApi.</string>
+    <string name="login_stub_error">Login is not implemented yet. The protocol is wired in MinTvApi.</string>
     <string name="login_success">Signed in.</string>
     <string name="login_back_hint">Back to return to channels</string>
 

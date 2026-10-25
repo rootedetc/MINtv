@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">MINtv</string>
-    <string name="brand_name">MAXtv</string>
-    <string name="brand_accent">lite</string>
+    <string name="brand_name">MIN</string>
+    <string name="brand_accent">tv</string>
 
     <!-- Channel list -->
     <string name="channels_title">TV kanali</string>
@@ -49,7 +49,7 @@
     <string name="action_login">Prijavi se</string>
     <string name="login_missing_fields">Upiši korisničko ime i lozinku.</string>
     <string name="login_in_progress">Prijava u tijeku…</string>
-    <string name="login_stub_error">Prijava još nije implementirana. Protokol se povezuje u MaxTvApi.</string>
+    <string name="login_stub_error">Prijava još nije implementirana. Protokol se povezuje u MinTvApi.</string>
     <string name="login_success">Prijava uspješna.</string>
     <string name="login_back_hint">Natrag za povratak na kanale</string>
 

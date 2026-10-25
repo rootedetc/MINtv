@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.MaxTvLite" parent="@android:style/Theme.Material.NoActionBar">
+    <style name="Theme.MinTvLite" parent="@android:style/Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/bg</item>
         <item name="android:colorAccent">@color/accent</item>
         <item name="android:colorPrimary">@color/accent</item>
@@ -14,7 +14,7 @@
     </style>
 
     <!-- TV button: flat surface, magenta ring on DPAD focus. -->
-    <style name="Widget.MaxTv.Button" parent="@android:style/Widget.Material.Button">
+    <style name="Widget.MinTv.Button" parent="@android:style/Widget.Material.Button">
         <item name="android:background">@drawable/bg_tv_button</item>
         <item name="android:textColor">@color/tv_button_text</item>
         <item name="android:textSize">15sp</item>
@@ -33,7 +33,7 @@
         <item name="android:insetBottom">0dp</item>
     </style>
 
-    <style name="Widget.MaxTv.Button.Accent" parent="Widget.MaxTv.Button">
+    <style name="Widget.MinTv.Button.Accent" parent="Widget.MinTv.Button">
         <item name="android:background">@drawable/bg_tv_button_accent</item>
         <item name="android:textColor">@color/tv_button_text_accent</item>
         <item name="android:fontFamily">sans-serif-medium</item>
@@ -43,7 +43,7 @@
         <item name="android:paddingEnd">26dp</item>
     </style>
 
-    <style name="Text.MaxTv.Label" parent="">
+    <style name="Text.MinTv.Label" parent="">
         <item name="android:textColor">@color/text_secondary</item>
         <item name="android:textSize">12sp</item>
         <item name="android:fontFamily">sans-serif-medium</item>
@@ -51,7 +51,7 @@
         <item name="android:textAllCaps">true</item>
     </style>
 
-    <style name="Text.MaxTv.Input" parent="">
+    <style name="Text.MinTv.Input" parent="">
         <item name="android:textColor">@color/text_primary</item>
         <item name="android:textColorHint">@color/text_tertiary</item>
         <item name="android:textSize">17sp</item>
