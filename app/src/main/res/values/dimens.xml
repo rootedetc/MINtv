@@ -1,8 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <dimen name="screen_padding_h">28dp</dimen>
+    <!-- 10-foot layout: 960 x 540 dp baseline, 16:9. -->
+    <dimen name="screen_padding_h">32dp</dimen>
+    <dimen name="screen_padding_v">20dp</dimen>
+
+    <!-- Shell -->
+    <dimen name="rail_width">96dp</dimen>
+    <dimen name="header_height">68dp</dimen>
+    <dimen name="header_rule">1dp</dimen>
+    <dimen name="nav_item_height">76dp</dimen>
+
+    <!-- Guide -->
+    <dimen name="ruler_height">40dp</dimen>
+    <dimen name="row_height">52dp</dimen>
+    <dimen name="channel_column">244dp</dimen>
+    <dimen name="inspector_height">152dp</dimen>
+    <dimen name="guide_gap">2dp</dimen>
+
+    <!-- Shapes -->
     <dimen name="card_radius">12dp</dimen>
-    <dimen name="grid_gap">7dp</dimen>
+    <dimen name="block_radius">6dp</dimen>
+    <dimen name="panel_radius">16dp</dimen>
     <dimen name="focus_stroke">2dp</dimen>
-    <dimen name="channel_card_height">120dp</dimen>
+
+    <!-- Channels -->
+    <dimen name="grid_gap">10dp</dimen>
+    <dimen name="channel_card_height">174dp</dimen>
+    <dimen name="channel_logo_height">104dp</dimen>
+
+    <!-- Settings -->
+    <dimen name="settings_rail_width">236dp</dimen>
+    <dimen name="settings_content_width">540dp</dimen>
+    <dimen name="settings_row_height">64dp</dimen>
+    <dimen name="section_gap">24dp</dimen>
+
+    <!-- Player -->
+    <dimen name="player_sheet_radius">14dp</dimen>
+    <dimen name="quick_panel_width">430dp</dimen>
+    <dimen name="quick_row_height">44dp</dimen>
+    <dimen name="transport_button">58dp</dimen>
 </resources>

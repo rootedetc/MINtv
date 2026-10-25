@@ -101,9 +101,14 @@ public final class PlaybackLauncher {
         PlaybackApi.Callback callback = new PlaybackApi.Callback() {
             @Override
             public void onReady(PlaybackApi.Playback playback) {
-                Channel playerChannel = playerChannel(channel, program);
-                activity.runOnUiThread(() -> activity.startActivity(
-                        PlayerActivity.intentForPlayback(activity, playerChannel, playback)));
+                Channel playerChannel = playerChannel(channel);
+                android.content.Intent intent = PlayerActivity.intentForPlayback(
+                        activity, playerChannel, playback);
+                intent.putExtra(PlayerActivity.EXTRA_LIVE, false);
+                intent.putExtra(PlayerActivity.EXTRA_PROGRAMME_TITLE, program.title);
+                intent.putExtra(PlayerActivity.EXTRA_PROGRAMME_START, program.startMs);
+                intent.putExtra(PlayerActivity.EXTRA_PROGRAMME_END, program.endMs);
+                activity.runOnUiThread(() -> activity.startActivity(intent));
             }
 
             @Override
@@ -121,18 +126,17 @@ public final class PlaybackLauncher {
 
     /**
      * {@link PlayerActivity#intentForPlayback} is typed on {@link Channel}, which carries the
-     * values the player's header shows. The EPG only has an {@link EpgChannel}, so build the
-     * minimal equivalent: the player title becomes the programme name and the subtitle keeps
-     * "channel number · quality". {@code Channel}'s only public factory is the JSON one, hence
-     * the round trip through {@link JSONObject}.
+     * channel identity the player overlay shows. The EPG only has an {@link EpgChannel}, so
+     * build the minimal equivalent; the programme title travels in its own extra so the
+     * channel is never renamed to the programme. {@code Channel}'s only public factory is the
+     * JSON one, hence the round trip through {@link JSONObject}.
      */
-    private static Channel playerChannel(EpgChannel channel, EpgProgram program) {
-        String title = program.title == null ? "" : program.title.trim();
+    private static Channel playerChannel(EpgChannel channel) {
         try {
             JSONObject json = new JSONObject();
             json.put("channel_number", channel.number);
             json.put("station_id", channel.stationId);
-            json.put("title", title.isEmpty() ? channel.title : title);
+            json.put("title", channel.title);
             json.put("channel_logo", channel.logoUrl);
             json.put("quality", channel.quality);
             json.put("is_free_to_air", channel.freeToAir);

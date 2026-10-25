@@ -12,9 +12,11 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
@@ -47,7 +49,9 @@ import local.mintv.net.ApiException;
 import local.mintv.net.Http;
 import local.mintv.net.PlaybackApi;
 import local.mintv.player.ChannelQueue;
+import local.mintv.player.QualityPreference;
 import local.mintv.player.PlayerOverlay;
+import local.mintv.player.TuneIdent;
 import local.mintv.player.QualityPreference;
 import local.mintv.player.StartupPolicy;
 
@@ -86,6 +90,13 @@ public final class PlayerActivity extends Activity {
     public static final String EXTRA_DRM_LICENSE_TOKEN = "local.mintv.extra.DRM_LICENSE_TOKEN";
     /** Complete Authorization header value for the licence request (e.g. Basic ...). */
     public static final String EXTRA_DRM_AUTH = "local.mintv.extra.DRM_AUTH";
+    public static final String EXTRA_CHANNEL_NUMBER = "local.mintv.extra.CHANNEL_NUMBER";
+    public static final String EXTRA_CHANNEL_TITLE = "local.mintv.extra.CHANNEL_TITLE";
+    public static final String EXTRA_CHANNEL_QUALITY = "local.mintv.extra.CHANNEL_QUALITY";
+    public static final String EXTRA_LIVE = "local.mintv.extra.LIVE";
+    public static final String EXTRA_PROGRAMME_TITLE = "local.mintv.extra.PROGRAMME_TITLE";
+    public static final String EXTRA_PROGRAMME_START = "local.mintv.extra.PROGRAMME_START";
+    public static final String EXTRA_PROGRAMME_END = "local.mintv.extra.PROGRAMME_END";
 
     /** Public, clear DASH VOD used to prove playback independently of MAXtv/CDN changes. */
     public static final String DEMO_DASH_URL =
@@ -107,8 +118,10 @@ public final class PlayerActivity extends Activity {
     private final List<View> overlayViews = new ArrayList<>();
     private PlaybackApi playbackApi;
     private Channel currentChannel;
+    private boolean liveSession = true;
     private boolean overlayVisible = true;
     private PlayerOverlay overlay;
+    private TuneIdent tuneIdent;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable hideSeekHud = () -> seekHud.setVisibility(View.GONE);
@@ -158,6 +171,9 @@ public final class PlayerActivity extends Activity {
         public void onPlaybackStateChanged(int playbackState) {
             if (playbackState == Player.STATE_READY) {
                 errorPanel.setVisibility(View.GONE);
+                if (tuneIdent != null) {
+                    tuneIdent.hide();
+                }
             } else if (playbackState == Player.STATE_BUFFERING) {
                 watchForSteadyStateRebuffer();
             }
@@ -231,6 +247,9 @@ public final class PlayerActivity extends Activity {
         intent.putExtra(EXTRA_TITLE, channel.getTitle());
         intent.putExtra(EXTRA_SUBTITLE, context.getString(
                 R.string.player_channel_subtitle, channel.getNumber(), quality));
+        intent.putExtra(EXTRA_CHANNEL_NUMBER, channel.getNumber());
+        intent.putExtra(EXTRA_CHANNEL_TITLE, channel.getTitle());
+        intent.putExtra(EXTRA_CHANNEL_QUALITY, quality);
         return intent;
     }
 
@@ -277,7 +296,8 @@ public final class PlayerActivity extends Activity {
         retryButton = findViewById(R.id.button_player_retry);
         playerView.setUseController(false);
         playbackApi = new PlaybackApi(this);
-        currentChannel = ChannelQueue.current();
+        liveSession = getIntent().getBooleanExtra(EXTRA_LIVE, true);
+        currentChannel = liveSession ? ChannelQueue.current() : null;
 
         // Rich TiviMate-style overlay owns the top-left channel card, top-right clock,
         // bottom programme card and the DOWN quick-switch strip.
@@ -297,13 +317,48 @@ public final class PlayerActivity extends Activity {
                     public void onPlayPause() {
                         togglePlayPause();
                     }
+
+                    @Override
+                    public void onQualityChanged() {
+                        applyQualityNow();
+                    }
                 });
         overlay.setChannelList(ChannelQueue.channels(), ChannelQueue.index());
-        if (currentChannel != null) {
+        if (liveSession && currentChannel != null) {
             overlay.setChannel(currentChannel, resolutionLabel());
+        } else {
+            overlay.setChannelInfo(
+                    getIntent().getIntExtra(EXTRA_CHANNEL_NUMBER, -1),
+                    getIntent().getStringExtra(EXTRA_CHANNEL_TITLE),
+                    getIntent().getStringExtra(EXTRA_CHANNEL_QUALITY));
+            overlay.setChannelList(java.util.Collections.emptyList(), -1);
         }
-        overlay.setLive(true);
+        overlay.setLive(liveSession);
+        if (!liveSession) {
+            overlay.setProgramme(
+                    getIntent().getStringExtra(EXTRA_PROGRAMME_TITLE),
+                    null,
+                    getIntent().getLongExtra(EXTRA_PROGRAMME_START, 0L),
+                    getIntent().getLongExtra(EXTRA_PROGRAMME_END, 0L));
+        }
         overlay.show();
+
+        // Station ident while the first frame is acquired. It is the loading state, not a
+        // minimum hold: STATE_READY removes it immediately.
+        tuneIdent = new TuneIdent(this);
+        ((ViewGroup) findViewById(android.R.id.content)).addView(tuneIdent,
+                new ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT));
+        if (currentChannel != null) {
+            local.mintv.epg.EpgProgram now = EpgCache.programmeAt(
+                    currentChannel.getNumber(), System.currentTimeMillis());
+            tuneIdent.showChannel(currentChannel, now == null ? null : now.title, true);
+        } else {
+            tuneIdent.showDemo(getIntent().getStringExtra(EXTRA_TITLE) != null
+                    ? getIntent().getStringExtra(EXTRA_TITLE)
+                    : getString(R.string.player_demo_title));
+        }
 
         // The legacy title/subtitle header (and its top gradient scrim) is gone; the rich
         // overlay owns the channel identity. Only the loading badge remains useful.
@@ -336,6 +391,11 @@ public final class PlayerActivity extends Activity {
         }
         started = true;
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        handler.removeCallbacks(overlayTick);
+        handler.post(overlayTick);
+        if (overlay != null && liveSession && currentChannel != null) {
+            overlay.setChannelList(ChannelQueue.channels(), ChannelQueue.index());
+        }
         if (player == null && !preparingMedia) {
             prepareMedia();
         }
@@ -373,6 +433,11 @@ public final class PlayerActivity extends Activity {
         if (overlay != null) {
             overlay.release();
             overlay = null;
+        }
+        if (tuneIdent != null) {
+            tuneIdent.animate().cancel();
+            ((ViewGroup) tuneIdent.getParent()).removeView(tuneIdent);
+            tuneIdent = null;
         }
         io.shutdownNow();
         handler.removeCallbacksAndMessages(null);
@@ -733,15 +798,28 @@ public final class PlayerActivity extends Activity {
         resumePositionMs = C.TIME_UNSET;
         playWhenReady = true;
         preflightFallbackUsed = false;
+        // Retry the channel we are actually on, not the channel this activity was born with.
+        if (!TextUtils.isEmpty(playbackUrl)) {
+            mediaUrl = playbackUrl;
+        }
         errorPanel.setVisibility(View.GONE);
-        hintView.setVisibility(View.VISIBLE);
+        hintView.setVisibility(View.GONE);
         prepareMedia();
     }
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        // The rich overlay gets first refusal: it owns OK/UP/DOWN and the quick-switch
-        // strip, and it never consumes BACK unless the strip is open.
+        // With the error sheet up, the retry button owns the D-pad. The overlay is hidden.
+        if (errorPanel != null && errorPanel.getVisibility() == View.VISIBLE) {
+            if (event.getKeyCode() == KeyEvent.KEYCODE_BACK) {
+                if (event.getAction() == KeyEvent.ACTION_UP) {
+                    finish();
+                }
+                return true;
+            }
+            return super.dispatchKeyEvent(event);
+        }
+        // The overlay gets first refusal: it owns OK/UP/DOWN and the quick-switch strip.
         if (overlay != null && overlay.dispatchKeyEvent(event)) {
             return true;
         }
@@ -752,9 +830,6 @@ public final class PlayerActivity extends Activity {
             return true;
         }
         if (event.getAction() != KeyEvent.ACTION_DOWN) {
-            return super.dispatchKeyEvent(event);
-        }
-        if (errorPanel != null && errorPanel.getVisibility() == View.VISIBLE) {
             return super.dispatchKeyEvent(event);
         }
 
@@ -886,7 +961,7 @@ public final class PlayerActivity extends Activity {
     // ------------------------------------------------------------------ zapping
 
     private void zap(int delta) {
-        if (!ChannelQueue.hasNext()) {
+        if (!liveSession || !ChannelQueue.hasNext()) {
             return;
         }
         Channel next = ChannelQueue.step(delta);
@@ -1018,9 +1093,36 @@ public final class PlayerActivity extends Activity {
         }
     }
 
+    private void applyQualityNow() {
+        String label;
+        switch (QualityPreference.get(this)) {
+            case MAX:
+                label = getString(R.string.quality_short_max);
+                break;
+            case SAVER:
+                label = getString(R.string.quality_short_saver);
+                break;
+            default:
+                label = getString(R.string.quality_short_auto);
+                break;
+        }
+        Toast.makeText(this, getString(R.string.player_quality_changed, label),
+                Toast.LENGTH_SHORT).show();
+        if (liveSession && currentChannel != null) {
+            // Re-tune the same channel so the new cap/ramp policy is applied immediately.
+            playChannel(currentChannel);
+        }
+    }
+
     private void showError(PlaybackException error) {
         stateView.setVisibility(View.GONE);
         hintView.setVisibility(View.GONE);
+        if (overlay != null) {
+            overlay.hide();
+        }
+        if (tuneIdent != null) {
+            tuneIdent.hide();
+        }
         String detail = error.getErrorCodeName();
         errorMessage.setText(TextUtils.isEmpty(detail)
                 ? getString(R.string.player_error_generic)

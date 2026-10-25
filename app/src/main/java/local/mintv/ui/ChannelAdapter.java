@@ -5,6 +5,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -16,25 +17,32 @@ import java.util.List;
 
 import local.mintv.R;
 import local.mintv.data.Channel;
+import local.mintv.epg.EpgCache;
+import local.mintv.epg.EpgProgram;
 
-/**
- * DPAD-first grid adapter. Cards are focusable roots; focus animates a modest scale and
- * the magenta ring comes from {@code bg_channel_card}. All touch listeners are incidental.
- */
+/** Channel cards with the current programme and a live progress line. */
 public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.ChannelHolder> {
 
     public interface OnChannelClick {
         void onChannelClick(Channel channel);
     }
 
-    private static final float FOCUS_SCALE = 1.035f;
-
     private final List<Channel> channels = new ArrayList<>();
     private final OnChannelClick listener;
+    private int spanCount = 6;
+    private int railFocusId = View.NO_ID;
 
     public ChannelAdapter(OnChannelClick listener) {
         this.listener = listener;
         setHasStableIds(true);
+    }
+
+    public void setSpanCount(int spanCount) {
+        this.spanCount = Math.max(1, spanCount);
+    }
+
+    public void setRailFocusId(int railFocusId) {
+        this.railFocusId = railFocusId;
     }
 
     @SuppressLint("NotifyDataSetChanged")
@@ -46,7 +54,12 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
         notifyDataSetChanged();
     }
 
-    /** True when a refresh produced the same line-up, so the grid need not be rebound. */
+    /** Refresh the now/next line without rebuilding the cards or moving focus. */
+    @SuppressLint("NotifyDataSetChanged")
+    public void refreshNow() {
+        notifyDataSetChanged();
+    }
+
     public boolean hasSameContent(List<Channel> other) {
         if (other == null || other.size() != channels.size()) {
             return false;
@@ -87,7 +100,7 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
 
     @Override
     public void onBindViewHolder(@NonNull ChannelHolder holder, int position) {
-        holder.bind(channels.get(position));
+        holder.bind(channels.get(position), position, spanCount, railFocusId);
     }
 
     @Override
@@ -101,8 +114,9 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
         private final TextView number;
         private final TextView title;
         private final TextView quality;
-        private final TextView free;
-        private final float elevation;
+        private final View free;
+        private final TextView now;
+        private final ProgressBar progress;
         private Channel channel;
 
         ChannelHolder(View itemView, OnChannelClick listener) {
@@ -112,47 +126,68 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
             title = itemView.findViewById(R.id.channel_title);
             quality = itemView.findViewById(R.id.channel_quality);
             free = itemView.findViewById(R.id.channel_free);
-            elevation = 10f * itemView.getResources().getDisplayMetrics().density;
+            now = itemView.findViewById(R.id.channel_now);
+            progress = itemView.findViewById(R.id.channel_progress);
 
+            Tv.focusScale(itemView, 1.035f);
             itemView.setOnClickListener(view -> {
                 if (channel != null) {
                     listener.onChannelClick(channel);
                 }
             });
             itemView.setOnFocusChangeListener((view, hasFocus) -> {
-                float scale = hasFocus ? FOCUS_SCALE : 1f;
                 view.animate()
-                        .scaleX(scale)
-                        .scaleY(scale)
-                        .setDuration(hasFocus ? 130L : 100L)
+                        .scaleX(hasFocus ? 1.035f : 1f)
+                        .scaleY(hasFocus ? 1.035f : 1f)
+                        .setDuration(hasFocus ? 140L : 110L)
                         .start();
-                view.setElevation(hasFocus ? elevation : 0f);
+                view.setElevation(hasFocus
+                        ? Tv.dpf(view.getContext(), 8f) : 0f);
             });
         }
 
-        void bind(Channel newChannel) {
+        void bind(Channel newChannel, int position, int spanCount, int railFocusId) {
             this.channel = newChannel;
-            // Reset any scale/elevation left over from a recycled focused row, while
-            // preserving the focused look if this holder is the one currently focused.
             boolean focused = itemView.isFocused();
-            float scale = focused ? FOCUS_SCALE : 1f;
-            itemView.setScaleX(scale);
-            itemView.setScaleY(scale);
-            itemView.setElevation(focused ? elevation : 0f);
+            itemView.setScaleX(focused ? 1.035f : 1f);
+            itemView.setScaleY(focused ? 1.035f : 1f);
 
             number.setText(newChannel.getNumber() >= 0
-                    ? String.valueOf(newChannel.getNumber())
-                    : "–");
+                    ? String.valueOf(newChannel.getNumber()) : "–");
             title.setText(newChannel.getTitle());
             quality.setText(newChannel.getQuality());
             quality.setVisibility(newChannel.getQuality().isEmpty()
-                    ? View.GONE
-                    : View.VISIBLE);
+                    ? View.GONE : View.VISIBLE);
             free.setVisibility(newChannel.isFreeToAir() ? View.VISIBLE : View.GONE);
-            itemView.setContentDescription(itemView.getContext().getString(
+            String description = itemView.getContext().getString(
                     R.string.channel_description,
                     newChannel.getTitle(),
-                    newChannel.getNumber()));
+                    newChannel.getNumber());
+            if (newChannel.isFreeToAir()) {
+                description += ", " + itemView.getContext().getString(
+                        R.string.channel_free_accessibility);
+            }
+            itemView.setContentDescription(description);
+
+            long nowMs = System.currentTimeMillis();
+            EpgProgram programme = EpgCache.programmeAt(newChannel.getNumber(), nowMs);
+            if (programme == null) {
+                now.setVisibility(View.GONE);
+                progress.setVisibility(View.GONE);
+            } else {
+                now.setVisibility(View.VISIBLE);
+                now.setText(programme.title);
+                now.setTextColor(programme.isLive(nowMs) ? Tv.TEXT : Tv.TEXT_3);
+                progress.setProgress(Math.round(programme.progress(nowMs) * 1000f));
+                progress.setVisibility(View.VISIBLE);
+            }
+
+            if (position % spanCount == 0 && railFocusId != View.NO_ID) {
+                itemView.setNextFocusLeftId(railFocusId);
+            } else {
+                itemView.setNextFocusLeftId(View.NO_ID);
+            }
+
             ImageLoader.load(logo, newChannel.getLogoUrl());
         }
     }

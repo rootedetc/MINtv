@@ -19,3 +19,6 @@ keystore.properties
 # OS noise
 .DS_Store
 Thumbs.db
+
+# Impeccable design working artifacts (local screenshots/decision pages)
+.impeccable/

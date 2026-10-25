@@ -1,20 +1,16 @@
 package local.mintv.player;
 
-import android.app.Activity;
 import android.content.Context;
-import android.content.res.ColorStateList;
-import android.graphics.Typeface;
-import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -25,173 +21,85 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
+import local.mintv.R;
 import local.mintv.data.Channel;
+import local.mintv.epg.EpgCache;
+import local.mintv.epg.EpgProgram;
+import local.mintv.ui.Tv;
 
 /**
- * TiviMate-style player overlay: channel identity top-left, wall clock top-right,
- * now/next + transport card at the bottom and a quick-switch channel strip that
- * expands upwards from the bottom card.
- *
- * <h3>Threading</h3>
- * <p>The whole class is main-thread only. Construct it from {@code onCreate}, call its
- * setters from the player's main-thread callbacks, and call {@link #release()} from
- * {@code onDestroy}.</p>
- *
- * <h3>Key handling</h3>
- * <p>The activity must give this overlay first refusal in its own
- * {@code dispatchKeyEvent}. The event is consumed only when this class returns
- * {@code true}; {@code BACK} is deliberately not consumed unless it is being used to
- * close the channel strip (in which case the activity must not exit).</p>
- *
- * <p>No XML, resources or new dependencies: every view is built programmatically and
- * every colour/string is local to this file.</p>
+ * Picture-first player chrome. Two pieces only: a quiet channel identity at the top-left
+ * and one transport plate at the bottom. Everything else is in the quick-channel drawer,
+ * including the stream quality. Nothing stays on screen when the viewer stops moving.
  */
 public final class PlayerOverlay {
 
-    /** Callbacks into the player activity. All are invoked on the main thread. */
     public interface Callback {
-        /** +1 next channel, -1 previous channel. */
         void onZap(int delta);
 
-        /** A channel row was confirmed in the quick-switch strip. */
         void onChannelPicked(Channel channel);
 
-        /** The play/pause box was pressed (or OK was pressed on the closed overlay). */
         void onPlayPause();
+
+        void onQualityChanged();
     }
 
-    // ------------------------------------------------------------------ tuning
-
     private static final long AUTO_HIDE_MS = 4_000L;
-    private static final long CLOCK_PERIOD_MS = 60_000L;
-    private static final long FADE_MS = 130L;
-
-    private static final int CARD_BG = 0xB30E1116;
-    private static final int CARD_STROKE = 0x26FFFFFF;
-    private static final int PANEL_BG = 0xF00E1116;
-    private static final int PANEL_STROKE = 0x26FFFFFF;
-
-    private static final int ACCENT = 0xFFE6007E;
-    private static final int ACCENT_BRIGHT = 0xFFFF3D9A;
-    private static final int TEXT_PRIMARY = 0xFFF5F7FA;
-    private static final int TEXT_SECONDARY = 0xFF98A2B3;
-    private static final int TEXT_TERTIARY = 0xFF6B7480;
-    private static final int WHITE = 0xFFFFFFFF;
-
-    /** Catch-up uses a distinct blue so it never reads as "this is live". */
-    private static final int TIME_SHIFT_BG = 0xFF2D6CDF;
-
-    private static final int CHANNEL_TITLE_SP = 28;
-    private static final int PILL_SP = 12;
-    private static final int CHIP_SP = 11;
-    private static final int CLOCK_SP = 22;
-    private static final int PROGRAMME_TITLE_SP = 19;
-    private static final int PROGRAMME_TIME_SP = 13;
-    private static final int HINT_SP = 12;
-    private static final int PLAY_GLYPH_SP = 19;
-    private static final int STRIP_NAME_SP = 16;
-    private static final int STRIP_NUMBER_SP = 15;
-    private static final int STRIP_HINT_SP = 11;
-
-    private static final int STRIP_WIDTH_DP = 420;
-    private static final int STRIP_ROW_HEIGHT_DP = 36;
-    private static final int STRIP_ROW_PITCH_DP = 38;   // row + 2 dp gap
-    private static final int STRIP_CHROME_DP = 26;      // panel padding + header
+    private static final long FADE_MS = 150L;
+    private static final int STRIP_ROW_HEIGHT_DP = 44;
     private static final int STRIP_MIN_ROWS = 3;
-    private static final int STRIP_MAX_ROWS = 7;
-
-    private static final String HINT_NORMAL =
-            "OK: play/pause \u00B7 \u2193: channels \u00B7 BACK: exit";
-    private static final String HINT_STRIP =
-            "OK: watch \u00B7 \u2191\u2193: browse \u00B7 BACK: close";
-
-    // ------------------------------------------------------------------- state
+    private static final int STRIP_MAX_ROWS = 6;
 
     private final Context context;
     private final FrameLayout overlay;
-    private final LinearLayout topLeftCard;
+    private final TextView channelNumber;
     private final TextView channelName;
-    private final TextView livePill;
-    private final TextView resolutionChip;
-    private final TextView clock;
-    private final LinearLayout bottomColumn;
-    private final LinearLayout stripCard;
-    private final LinearLayout stripRows;
-    private final LinearLayout bottomCard;
-    private final TextView playPause;
+    private final TextView channelState;
+    private final TextView channelResolution;
+    private final LinearLayout sheet;
+    private final ImageView playPause;
     private final TextView programmeTitle;
     private final TextView programmeTime;
-    private final ProgressBar progress;
+    private final TextView next;
+    private final TextView qualityValue;
     private final TextView hint;
+    private final ProgressBar progress;
+
+    private final LinearLayout strip;
+    private final LinearLayout stripQuality;
+    private final TextView stripQualityValue;
+    private final TextView stripHint;
+    private final LinearLayout stripRows;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final SimpleDateFormat clockFormat =
-            new SimpleDateFormat("HH:mm", Locale.getDefault());
+    private final SimpleDateFormat clock = new SimpleDateFormat("HH:mm", Locale.getDefault());
     private final List<Channel> channels = new ArrayList<>();
 
     private Callback callback;
-
     private boolean visible;
     private boolean released;
     private boolean stripOpen;
     private boolean live = true;
     private boolean playing;
-
-    private int channelNumber = -1;
+    private int channelNumberValue = -1;
     private String resolution = "";
-
     private int listIndex = -1;
     private int stripFocus = -1;
     private int stripWindowStart;
     private int stripVisibleCount = STRIP_MAX_ROWS;
-
     private String programmeTitleText = "";
     private String programmeTimeText = "";
     private long programmeStartMs;
     private long programmeEndMs;
     private long positionMs;
     private long durationMs;
-
-    /** The key whose ACTION_DOWN we consumed, so its ACTION_UP can be swallowed too. */
     private int lastHandledDown = KeyEvent.KEYCODE_UNKNOWN;
 
-    private final Runnable hideRunnable = new Runnable() {
-        @Override
-        public void run() {
-            hide();
-        }
-    };
+    private final Runnable hideRunnable = this::hide;
 
-    private final Runnable clockRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (released || !visible) {
-                return;
-            }
-            updateClock();
-            updateProgress();
-            scheduleClock();
-        }
-    };
-
-    // ------------------------------------------------------------- construction
-
-    /**
-     * Builds the whole overlay and attaches it as the last child of {@code root}.
-     *
-     * @param activity host activity (used only to validate the caller; the views take
-     *                 their context from {@code root})
-     * @param root     the content container, normally
-     *                 {@code findViewById(android.R.id.content)} or the FrameLayout of
-     *                 {@code activity_player.xml}; the overlay is added on top of it
-     * @param callback player callbacks, may be {@code null} but then keys are inert
-     */
-    public PlayerOverlay(Activity activity, ViewGroup root, Callback callback) {
-        if (activity == null) {
-            throw new IllegalArgumentException("activity == null");
-        }
-        if (root == null) {
-            throw new IllegalArgumentException("root == null");
+    public PlayerOverlay(android.app.Activity activity, ViewGroup root, Callback callback) {
+        if (activity == null || root == null) {
+            throw new IllegalArgumentException("activity/root == null");
         }
         this.context = root.getContext();
         this.callback = callback;
@@ -202,226 +110,298 @@ public final class PlayerOverlay {
         overlay.setClipChildren(false);
         overlay.setClipToPadding(false);
 
-        // ---- top-left: channel name + LIVE/TIME SHIFT + resolution
-        topLeftCard = new LinearLayout(context);
-        topLeftCard.setOrientation(LinearLayout.VERTICAL);
-        topLeftCard.setPadding(dp(16), dp(12), dp(16), dp(12));
-        topLeftCard.setBackground(panelBackground(dp(14)));
+        View topScrim = new View(context);
+        topScrim.setBackgroundResource(R.drawable.bg_scrim_top);
+        overlay.addView(topScrim, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Tv.dp(context, 230),
+                Gravity.TOP));
 
-        channelName = label(CHANNEL_TITLE_SP, TEXT_PRIMARY, true);
+        View bottomScrim = new View(context);
+        bottomScrim.setBackgroundResource(R.drawable.bg_scrim_bottom);
+        overlay.addView(bottomScrim, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Tv.dp(context, 260),
+                Gravity.BOTTOM));
+
+        // ---------------------------------------------------------- identity
+        LinearLayout identity = new LinearLayout(context);
+        identity.setOrientation(LinearLayout.HORIZONTAL);
+        identity.setGravity(Gravity.CENTER_VERTICAL);
+
+        channelNumber = Tv.numeral(context, 21f, 0xFFFFFFFF);
+        channelNumber.setGravity(Gravity.CENTER);
+        channelNumber.setBackground(Tv.box(context, Tv.BRAND, 4f, 0, 0f));
+        channelNumber.setPadding(Tv.dp(context, 10), Tv.dp(context, 5),
+                Tv.dp(context, 10), Tv.dp(context, 5));
+        channelNumber.setText("—");
+        identity.addView(channelNumber);
+
+        LinearLayout names = new LinearLayout(context);
+        names.setOrientation(LinearLayout.VERTICAL);
+        channelName = Tv.displayText(context, 31f, 0xFFFFFFFF);
         channelName.setSingleLine(true);
         channelName.setEllipsize(TextUtils.TruncateAt.END);
-        channelName.setMaxWidth(dp(600));
-        channelName.setText("\u2014");
-        // WRAP_CONTENT, not MATCH_PARENT: in a WRAP_CONTENT card a MATCH_PARENT child
-        // is measured against the sibling badge row and ellipsises the channel name.
-        topLeftCard.addView(channelName, wrapWrap());
+        channelName.setMinWidth(Tv.dp(context, 220));
+        channelName.setMaxWidth(Tv.dp(context, 760));
+        channelName.setShadowLayer(Tv.dpf(context, 7f), 0f, Tv.dpf(context, 2f), 0xCC000000);
+        channelName.setText("—");
+        names.addView(channelName);
 
-        LinearLayout badges = new LinearLayout(context);
-        badges.setOrientation(LinearLayout.HORIZONTAL);
-        badges.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams badgeRowLp = wrapWrap();
-        badgeRowLp.topMargin = dp(7);
-        topLeftCard.addView(badges, badgeRowLp);
+        LinearLayout stateRow = new LinearLayout(context);
+        stateRow.setOrientation(LinearLayout.HORIZONTAL);
+        stateRow.setGravity(Gravity.CENTER_VERTICAL);
+        View dot = new View(context);
+        dot.setBackground(Tv.box(context, Tv.BRAND_BRIGHT, 99f, 0, 0f));
+        LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(
+                Tv.dp(context, 6), Tv.dp(context, 6));
+        dotLp.rightMargin = Tv.dp(context, 7);
+        stateRow.addView(dot, dotLp);
+        channelState = Tv.label(context, "", Tv.BRAND_BRIGHT);
+        channelState.setShadowLayer(Tv.dpf(context, 5f), 0f, Tv.dpf(context, 1f), 0xCC000000);
+        stateRow.addView(channelState);
+        channelResolution = Tv.label(context, "", Tv.TEXT_2);
+        channelResolution.setShadowLayer(Tv.dpf(context, 5f), 0f, Tv.dpf(context, 1f), 0xCC000000);
+        LinearLayout.LayoutParams resLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        resLp.leftMargin = Tv.dp(context, 8);
+        stateRow.addView(channelResolution, resLp);
+        LinearLayout.LayoutParams stateLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        stateLp.topMargin = Tv.dp(context, 5);
+        names.addView(stateRow, stateLp);
+        LinearLayout.LayoutParams namesLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        namesLp.leftMargin = Tv.dp(context, 14);
+        identity.addView(names, namesLp);
 
-        livePill = label(PILL_SP, WHITE, true);
-        livePill.setAllCaps(true);
-        livePill.setLetterSpacing(0.08f);
-        livePill.setGravity(Gravity.CENTER);
-        livePill.setPadding(dp(8), dp(3), dp(8), dp(3));
-        badges.addView(livePill, wrapWrap());
-
-        resolutionChip = label(CHIP_SP, 0xFFD6DEE8, true);
-        resolutionChip.setAllCaps(true);
-        resolutionChip.setLetterSpacing(0.10f);
-        resolutionChip.setGravity(Gravity.CENTER);
-        resolutionChip.setPadding(dp(7), dp(3), dp(7), dp(3));
-        resolutionChip.setBackground(box(0x33FFFFFF, 5, 0, 0));
-        resolutionChip.setVisibility(View.GONE);
-        LinearLayout.LayoutParams chipLp = wrapWrap();
-        chipLp.leftMargin = dp(8);
-        badges.addView(resolutionChip, chipLp);
-
-        FrameLayout.LayoutParams topLeftLp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
+        FrameLayout.LayoutParams identityLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP | Gravity.START);
-        topLeftLp.leftMargin = dp(32);
-        topLeftLp.topMargin = dp(20);
-        overlay.addView(topLeftCard, topLeftLp);
+        identityLp.leftMargin = Tv.dp(context, 36);
+        identityLp.topMargin = Tv.dp(context, 28);
+        overlay.addView(identity, identityLp);
 
-        // ---- top-right: wall clock
-        LinearLayout clockCard = new LinearLayout(context);
-        clockCard.setOrientation(LinearLayout.HORIZONTAL);
-        clockCard.setPadding(dp(14), dp(8), dp(14), dp(8));
-        clockCard.setBackground(panelBackground(dp(12)));
+        // ---------------------------------------------------------- transport
+        sheet = new LinearLayout(context);
+        sheet.setOrientation(LinearLayout.VERTICAL);
+        sheet.setBackground(Tv.box(context, 0xE60B0D11, 14f, 0x26FFFFFF, 1f));
+        sheet.setElevation(Tv.dpf(context, 8f));
+        sheet.setPadding(Tv.dp(context, 16), Tv.dp(context, 14),
+                Tv.dp(context, 18), Tv.dp(context, 12));
 
-        clock = label(CLOCK_SP, TEXT_PRIMARY, true);
-        clock.setText("--:--");
-        clockCard.addView(clock, wrapWrap());
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        sheet.addView(row, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        FrameLayout.LayoutParams clockLp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP | Gravity.END);
-        clockLp.rightMargin = dp(32);
-        clockLp.topMargin = dp(20);
-        overlay.addView(clockCard, clockLp);
+        playPause = new ImageView(context);
+        playPause.setImageResource(R.drawable.ic_pause);
+        playPause.setBackgroundResource(R.drawable.bg_play_button);
+        playPause.setPadding(Tv.dp(context, 16), Tv.dp(context, 16),
+                Tv.dp(context, 16), Tv.dp(context, 16));
+        playPause.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        playPause.setClickable(true);
+        playPause.setOnClickListener(view -> {
+            scheduleHide();
+            firePlayPause();
+        });
+        LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams(
+                Tv.dp(context, 58), Tv.dp(context, 58));
+        playLp.rightMargin = Tv.dp(context, 18);
+        row.addView(playPause, playLp);
 
-        // ---- bottom column: strip (hidden) above the info card
-        bottomColumn = new LinearLayout(context);
-        bottomColumn.setOrientation(LinearLayout.VERTICAL);
-        bottomColumn.setGravity(Gravity.BOTTOM);
+        LinearLayout programme = new LinearLayout(context);
+        programme.setOrientation(LinearLayout.VERTICAL);
+        programme.setGravity(Gravity.CENTER_VERTICAL);
+        row.addView(programme, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        stripCard = new LinearLayout(context);
-        stripCard.setOrientation(LinearLayout.VERTICAL);
-        stripCard.setPadding(dp(4), dp(4), dp(4), dp(4));
-        stripCard.setBackground(panelBackground(dp(12)));
-        stripCard.setVisibility(View.GONE);
+        programmeTitle = Tv.displayText(context, 26f, 0xFFFFFFFF);
+        programmeTitle.setSingleLine(true);
+        programmeTitle.setEllipsize(TextUtils.TruncateAt.END);
+        programmeTitle.setText(R.string.player_loading);
+        programme.addView(programmeTitle);
 
-        TextView stripHeader = label(10, TEXT_TERTIARY, true);
-        stripHeader.setText("CHANNELS");
-        stripHeader.setAllCaps(true);
-        stripHeader.setLetterSpacing(0.12f);
-        stripHeader.setPadding(dp(10), dp(2), dp(10), dp(2));
-        stripCard.addView(stripHeader, matchWrap());
+        LinearLayout meta = new LinearLayout(context);
+        meta.setOrientation(LinearLayout.HORIZONTAL);
+        meta.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams metaLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        metaLp.topMargin = Tv.dp(context, 4);
+        programme.addView(meta, metaLp);
+
+        programmeTime = Tv.text(context, 12.5f, Tv.TEXT_2, false);
+        programmeTime.setFontFeatureSettings("tnum");
+        programmeTime.setSingleLine(true);
+        meta.addView(programmeTime);
+
+        next = Tv.text(context, 11.5f, Tv.TEXT_3, false);
+        next.setSingleLine(true);
+        next.setEllipsize(TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams nextLp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        nextLp.leftMargin = Tv.dp(context, 16);
+        meta.addView(next, nextLp);
+
+        LinearLayout side = new LinearLayout(context);
+        side.setOrientation(LinearLayout.VERTICAL);
+        side.setGravity(Gravity.END);
+        LinearLayout.LayoutParams sideLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        sideLp.leftMargin = Tv.dp(context, 18);
+        row.addView(side, sideLp);
+
+        TextView qualityLabel = Tv.label(context, getString(R.string.player_quality_short),
+                Tv.TEXT_3);
+        qualityLabel.setGravity(Gravity.END);
+        qualityLabel.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 9f);
+        qualityLabel.setLetterSpacing(0.06f);
+        side.addView(qualityLabel);
+        qualityValue = Tv.displayText(context, 15f, Tv.TEXT);
+        qualityValue.setGravity(Gravity.END);
+        LinearLayout.LayoutParams qualityLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        qualityLp.topMargin = Tv.dp(context, 2);
+        side.addView(qualityValue, qualityLp);
+
+        progress = new ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal);
+        progress.setMax(1000);
+        progress.setProgress(0);
+        progress.setProgressTintList(android.content.res.ColorStateList.valueOf(Tv.BRAND));
+        progress.setProgressBackgroundTintList(
+                android.content.res.ColorStateList.valueOf(0x26FFFFFF));
+        LinearLayout.LayoutParams progressLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Tv.dp(context, 3));
+        progressLp.topMargin = Tv.dp(context, 13);
+        sheet.addView(progress, progressLp);
+
+        hint = Tv.text(context, 11.5f, Tv.TEXT_3, false);
+        hint.setSingleLine(true);
+        hint.setGravity(Gravity.END);
+        hint.setText(R.string.player_hint_simple);
+        LinearLayout.LayoutParams hintLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        hintLp.topMargin = Tv.dp(context, 8);
+        hint.setGravity(Gravity.END);
+        sheet.addView(hint, hintLp);
+
+        FrameLayout.LayoutParams sheetLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM);
+        sheetLp.leftMargin = Tv.dp(context, 32);
+        sheetLp.rightMargin = Tv.dp(context, 32);
+        sheetLp.bottomMargin = Tv.dp(context, 24);
+        overlay.addView(sheet, sheetLp);
+
+        // ---------------------------------------------------------- quick drawer
+        strip = new LinearLayout(context);
+        strip.setOrientation(LinearLayout.VERTICAL);
+        // Opaque: the channel identity behind the drawer must never show through the
+        // quality row when the drawer opens.
+        strip.setBackground(Tv.box(context, 0xFF0B0D11, 14f, 0x26FFFFFF, 1f));
+        strip.setPadding(Tv.dp(context, 12), Tv.dp(context, 12),
+                Tv.dp(context, 12), Tv.dp(context, 10));
+        strip.setVisibility(View.GONE);
+
+        LinearLayout stripHeader = new LinearLayout(context);
+        stripHeader.setOrientation(LinearLayout.HORIZONTAL);
+        stripHeader.setGravity(Gravity.CENTER_VERTICAL);
+        TextView stripTitle = Tv.label(context, getString(R.string.player_channels), Tv.TEXT_2);
+        stripHeader.addView(stripTitle);
+        strip.addView(stripHeader);
+
+        stripQuality = new LinearLayout(context);
+        stripQuality.setOrientation(LinearLayout.HORIZONTAL);
+        stripQuality.setGravity(Gravity.CENTER_VERTICAL);
+        stripQuality.setPadding(Tv.dp(context, 10), 0, Tv.dp(context, 10), 0);
+        TextView stripQualityLabel = Tv.label(context,
+                getString(R.string.player_quality_label), Tv.TEXT_3);
+        stripQuality.addView(stripQualityLabel);
+        stripQualityValue = Tv.displayText(context, 15f, Tv.TEXT);
+        LinearLayout.LayoutParams stripQualityLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        stripQualityLp.leftMargin = Tv.dp(context, 10);
+        stripQuality.addView(stripQualityValue, stripQualityLp);
+        LinearLayout.LayoutParams stripQualityRowLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Tv.dp(context, 38));
+        stripQualityRowLp.topMargin = Tv.dp(context, 4);
+        strip.addView(stripQuality, stripQualityRowLp);
+        stripQuality.setOnClickListener(view -> {
+            stripFocus = -1;
+            rebuildStrip();
+            cycleQuality();
+        });
 
         stripRows = new LinearLayout(context);
         stripRows.setOrientation(LinearLayout.VERTICAL);
-        stripCard.addView(stripRows, matchWrap());
+        LinearLayout.LayoutParams rowsLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowsLp.topMargin = Tv.dp(context, 3);
+        strip.addView(stripRows, rowsLp);
 
-        LinearLayout.LayoutParams stripLp = new LinearLayout.LayoutParams(
-                dp(STRIP_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT);
-        stripLp.gravity = Gravity.START;
-        stripLp.bottomMargin = dp(10);
-        bottomColumn.addView(stripCard, stripLp);
+        stripHint = Tv.text(context, 9.5f, Tv.TEXT_3, false);
+        stripHint.setText(R.string.player_hint_strip_simple);
+        stripHint.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams stripHintLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        stripHintLp.topMargin = Tv.dp(context, 7);
+        strip.addView(stripHint, stripHintLp);
 
-        bottomCard = new LinearLayout(context);
-        bottomCard.setOrientation(LinearLayout.HORIZONTAL);
-        bottomCard.setGravity(Gravity.CENTER_VERTICAL);
-        bottomCard.setPadding(dp(14), dp(13), dp(16), dp(13));
-        bottomCard.setMinimumHeight(dp(104));
-        bottomCard.setBackground(cardBackground(dp(14)));
-        bottomCard.setElevation(dp(8));
-        bottomColumn.addView(bottomCard, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM);
-        bottomLp.leftMargin = dp(32);
-        bottomLp.rightMargin = dp(32);
-        bottomLp.bottomMargin = dp(20);
-        overlay.addView(bottomColumn, bottomLp);
-
-        playPause = label(PLAY_GLYPH_SP, TEXT_PRIMARY, true);
-        playPause.setGravity(Gravity.CENTER);
-        playPause.setFocusable(true);
-        playPause.setClickable(true);
-        playPause.setContentDescription("Play");
-        playPause.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                scheduleHide();
-                firePlayPause();
-            }
-        });
-        playPause.setOnFocusChangeListener(new View.OnFocusChangeListener() {
-            @Override
-            public void onFocusChange(View view, boolean hasFocus) {
-                refreshPlayPauseBackground();
-            }
-        });
-        LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams(dp(48), dp(48));
-        playLp.rightMargin = dp(16);
-        bottomCard.addView(playPause, playLp);
-
-        LinearLayout info = new LinearLayout(context);
-        info.setOrientation(LinearLayout.VERTICAL);
-        info.setGravity(Gravity.CENTER_VERTICAL);
-        bottomCard.addView(info, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-        programmeTitle = label(PROGRAMME_TITLE_SP, TEXT_PRIMARY, true);
-        programmeTitle.setSingleLine(true);
-        programmeTitle.setEllipsize(TextUtils.TruncateAt.END);
-        programmeTitle.setVisibility(View.GONE);
-        info.addView(programmeTitle, matchWrap());
-
-        programmeTime = label(PROGRAMME_TIME_SP, TEXT_SECONDARY, false);
-        programmeTime.setSingleLine(true);
-        programmeTime.setVisibility(View.GONE);
-        LinearLayout.LayoutParams timeLp = matchWrap();
-        timeLp.topMargin = dp(2);
-        info.addView(programmeTime, timeLp);
-
-        progress = new ProgressBar(context, null,
-                android.R.attr.progressBarStyleHorizontal);
-        progress.setMax(1000);
-        progress.setIndeterminate(false);
-        progress.setProgress(0);
-        progress.setMinimumHeight(dp(4));
-        progress.setProgressTintList(ColorStateList.valueOf(ACCENT));
-        progress.setProgressBackgroundTintList(
-                ColorStateList.valueOf(0x33FFFFFF));
-        progress.setVisibility(View.GONE);
-        LinearLayout.LayoutParams progressLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(4));
-        progressLp.topMargin = dp(8);
-        info.addView(progress, progressLp);
-
-        hint = label(HINT_SP, TEXT_TERTIARY, false);
-        hint.setSingleLine(true);
-        hint.setLetterSpacing(0.02f);
-        hint.setText(HINT_NORMAL);
-        LinearLayout.LayoutParams hintLp = matchWrap();
-        hintLp.topMargin = dp(8);
-        info.addView(hint, hintLp);
+        FrameLayout.LayoutParams stripLp = new FrameLayout.LayoutParams(
+                Tv.dp(context, 430), ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.START);
+        stripLp.leftMargin = Tv.dp(context, 32);
+        stripLp.bottomMargin = Tv.dp(context, 156);
+        overlay.addView(strip, stripLp);
 
         root.addView(overlay, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT));
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        updateLivePill();
-        updateResolutionChip();
+        updateState();
         updatePlayGlyph();
-        refreshPlayPauseBackground();
+        updateQuality();
     }
 
-    // -------------------------------------------------------------- public API
+    // ------------------------------------------------------------------ public API
 
-    /** Called whenever the playing channel changes. */
     public void setChannel(Channel channel, String resolutionLabel) {
         if (released) {
             return;
         }
-        channelNumber = channel != null ? channel.getNumber() : -1;
-        String title = channel != null ? channel.getTitle() : "";
-        channelName.setText(TextUtils.isEmpty(title) ? "\u2014" : title);
-
-        String resLabel = resolutionLabel;
-        if (TextUtils.isEmpty(resLabel) && channel != null) {
-            resLabel = channel.getQuality();
+        String label = resolutionLabel;
+        if (TextUtils.isEmpty(label) && channel != null) {
+            label = channel.getQuality();
         }
-        resolution = resLabel == null ? "" : resLabel.trim();
-        updateResolutionChip();
-
-        int found = channelNumber >= 0 ? indexOfNumber(channelNumber) : -1;
+        setChannelInfo(channel == null ? -1 : channel.getNumber(),
+                channel == null ? "" : channel.getTitle(), label);
+        int found = channelNumberValue >= 0 ? indexOfNumber(channelNumberValue) : -1;
         if (found >= 0) {
             listIndex = found;
         }
+        refreshNext();
         if (stripOpen) {
             stripFocus = resolveCurrentIndex();
-            int size = channels.size();
-            int visibleCount = Math.min(stripVisibleCount, size);
-            stripWindowStart = clamp(stripFocus - visibleCount / 2, 0,
-                    Math.max(0, size - visibleCount));
+            clampStripWindow();
             rebuildStrip();
         }
     }
 
-    /** Optional now/next info; either string may be null. Pass 0/0 when unknown. */
+    /** Identity without a Channel object, used by catch-up launches. */
+    public void setChannelInfo(int number, String title, String resolutionLabel) {
+        if (released) {
+            return;
+        }
+        channelNumberValue = number;
+        channelNumber.setText(number >= 0 ? String.valueOf(number) : "—");
+        channelName.setText(TextUtils.isEmpty(title) ? "—" : title);
+        resolution = resolutionLabel == null ? "" : resolutionLabel.trim();
+        if (TextUtils.isEmpty(resolution)) {
+            resolution = "";
+        }
+        channelResolution.setText(resolution.toUpperCase(Locale.US));
+        channelResolution.setVisibility(TextUtils.isEmpty(resolution) ? View.GONE : View.VISIBLE);
+    }
+
     public void setProgramme(String title, String timeRange, long startMs, long endMs) {
         if (released) {
             return;
@@ -432,19 +412,18 @@ public final class PlayerOverlay {
         programmeEndMs = Math.max(0L, endMs);
         updateProgramme();
         updateProgress();
+        refreshNext();
     }
 
-    /** LIVE versus time-shift/catch-up pill. */
     public void setLive(boolean isLive) {
         if (released) {
             return;
         }
         live = isLive;
-        updateLivePill();
+        updateState();
         updateProgress();
     }
 
-    /** Line-up for the quick-switch strip. {@code currentIndex} may be stale. */
     public void setChannelList(List<Channel> list, int currentIndex) {
         if (released) {
             return;
@@ -457,19 +436,14 @@ public final class PlayerOverlay {
                 }
             }
         }
-        listIndex = currentIndex >= 0 && currentIndex < channels.size()
-                ? currentIndex : -1;
+        listIndex = currentIndex >= 0 && currentIndex < channels.size() ? currentIndex : -1;
         if (stripOpen) {
             stripFocus = resolveCurrentIndex();
-            int size = channels.size();
-            int visibleCount = Math.min(stripVisibleCount, size);
-            stripWindowStart = clamp(stripFocus - visibleCount / 2, 0,
-                    Math.max(0, size - visibleCount));
+            clampStripWindow();
             rebuildStrip();
         }
     }
 
-    /** Playback state, for the play/pause glyph and the progress bar. */
     public void onPlaybackState(boolean isPlaying, long positionMs, long durationMs) {
         if (released) {
             return;
@@ -481,21 +455,12 @@ public final class PlayerOverlay {
         updateProgress();
     }
 
-    /**
-     * Returns true when the overlay consumed the key.
-     *
-     * <p>Only ACTION_DOWN performs an action; the matching ACTION_UP is swallowed so the
-     * focused player view cannot react a second time. {@code BACK} is not consumed while
-     * the strip is closed - the activity owns exit - but it does close the strip and is
-     * consumed in that case.</p>
-     */
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (released || event == null) {
             return false;
         }
-        final int action = event.getAction();
-        final int code = event.getKeyCode();
-
+        int action = event.getAction();
+        int code = event.getKeyCode();
         if (action == KeyEvent.ACTION_UP) {
             if (lastHandledDown == code) {
                 lastHandledDown = KeyEvent.KEYCODE_UNKNOWN;
@@ -506,19 +471,10 @@ public final class PlayerOverlay {
         if (action != KeyEvent.ACTION_DOWN) {
             return false;
         }
-
         if (event.getRepeatCount() > 0 && isConfirmKey(code)) {
-            // Holding OK must not machine-gun play/pause or channel picks.
             return visible;
         }
-
-        boolean handled;
-        if (!visible) {
-            handled = handleHidden(code);
-        } else {
-            scheduleHide();
-            handled = handleVisible(code);
-        }
+        boolean handled = visible ? handleVisible(code) : handleHidden(code);
         lastHandledDown = handled ? code : KeyEvent.KEYCODE_UNKNOWN;
         return handled;
     }
@@ -529,15 +485,16 @@ public final class PlayerOverlay {
         }
         boolean wasVisible = visible;
         visible = true;
+        refreshNext();
+        updateQuality();
         overlay.animate().cancel();
         if (!wasVisible) {
             overlay.setAlpha(0f);
             overlay.setVisibility(View.VISIBLE);
-            overlay.animate().alpha(1f).setDuration(FADE_MS).start();
+            overlay.setTranslationY(Tv.dp(context, 6));
+            overlay.animate().alpha(1f).translationY(0f)
+                    .setDuration(FADE_MS).start();
         }
-        updateClock();
-        scheduleClock();
-        refreshPlayPauseBackground();
         scheduleHide();
     }
 
@@ -547,17 +504,12 @@ public final class PlayerOverlay {
         }
         visible = false;
         handler.removeCallbacks(hideRunnable);
-        handler.removeCallbacks(clockRunnable);
-        collapseStrip();
-        refreshPlayPauseBackground();
+        collapseStrip(false);
         overlay.animate().cancel();
         overlay.animate().alpha(0f).setDuration(FADE_MS)
-                .withEndAction(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (!visible) {
-                            overlay.setVisibility(View.GONE);
-                        }
+                .withEndAction(() -> {
+                    if (!visible) {
+                        overlay.setVisibility(View.GONE);
                     }
                 })
                 .start();
@@ -567,7 +519,6 @@ public final class PlayerOverlay {
         return visible;
     }
 
-    /** Stops the clock ticker, drops callbacks and detaches the view tree. */
     public void release() {
         if (released) {
             return;
@@ -575,18 +526,17 @@ public final class PlayerOverlay {
         released = true;
         visible = false;
         stripOpen = false;
-        lastHandledDown = KeyEvent.KEYCODE_UNKNOWN;
         callback = null;
         handler.removeCallbacksAndMessages(null);
         overlay.animate().cancel();
-        stripCard.animate().cancel();
+        strip.animate().cancel();
         stripRows.removeAllViews();
         if (overlay.getParent() instanceof ViewGroup) {
             ((ViewGroup) overlay.getParent()).removeView(overlay);
         }
     }
 
-    // -------------------------------------------------------------- key routing
+    // ------------------------------------------------------------------ keys
 
     private boolean handleHidden(int code) {
         switch (code) {
@@ -604,25 +554,23 @@ public final class PlayerOverlay {
                 show();
                 return true;
             case KeyEvent.KEYCODE_BACK:
-                // The activity handles exit; never flash the overlay on the way out.
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
                 return false;
             default:
-                // "Any key wakes the overlay", but leave the key itself to the activity.
                 show();
                 return false;
         }
     }
 
     private boolean handleVisible(int code) {
-        // Physical channel keys zap from either state; browsing is a DPAD gesture.
         if (code == KeyEvent.KEYCODE_CHANNEL_UP || code == KeyEvent.KEYCODE_CHANNEL_DOWN) {
             if (stripOpen) {
-                collapseStrip();
+                collapseStrip(true);
             }
             fireZap(code == KeyEvent.KEYCODE_CHANNEL_UP ? 1 : -1);
             return true;
         }
-
         if (stripOpen) {
             switch (code) {
                 case KeyEvent.KEYCODE_DPAD_UP:
@@ -631,23 +579,38 @@ public final class PlayerOverlay {
                 case KeyEvent.KEYCODE_DPAD_DOWN:
                     moveStrip(1);
                     return true;
+                case KeyEvent.KEYCODE_DPAD_LEFT:
+                    if (stripFocus >= 0) {
+                        stripFocus = -1;
+                        rebuildStrip();
+                    }
+                    return true;
+                case KeyEvent.KEYCODE_DPAD_RIGHT:
+                    if (stripFocus < 0) {
+                        stripFocus = resolveCurrentIndex();
+                        clampStripWindow();
+                        rebuildStrip();
+                    }
+                    return true;
                 case KeyEvent.KEYCODE_DPAD_CENTER:
                 case KeyEvent.KEYCODE_ENTER:
                 case KeyEvent.KEYCODE_NUMPAD_ENTER:
-                    pickStripChannel();
+                    if (stripFocus < 0) {
+                        cycleQuality();
+                    } else {
+                        pickStripChannel();
+                    }
                     return true;
                 case KeyEvent.KEYCODE_BACK:
-                case KeyEvent.KEYCODE_DPAD_LEFT:
-                    collapseStrip();
+                    collapseStrip(true);
                     return true;
                 default:
                     return false;
             }
         }
-
         switch (code) {
             case KeyEvent.KEYCODE_DPAD_UP:
-                // Zap but keep the overlay so the new name is visible immediately.
+                scheduleHide();
                 fireZap(1);
                 return true;
             case KeyEvent.KEYCODE_DPAD_DOWN:
@@ -658,11 +621,14 @@ public final class PlayerOverlay {
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
             case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
             case KeyEvent.KEYCODE_HEADSETHOOK:
+                scheduleHide();
                 firePlayPause();
                 return true;
             case KeyEvent.KEYCODE_BACK:
-                return false;
+                hide();
+                return true;
             default:
+                scheduleHide();
                 return false;
         }
     }
@@ -689,72 +655,82 @@ public final class PlayerOverlay {
         }
     }
 
-    // ----------------------------------------------------------- channel strip
+    // ------------------------------------------------------------------ strip
 
     private void openStrip() {
-        scheduleHide();
         if (channels.isEmpty()) {
             return;
         }
         stripVisibleCount = computeStripRowCount();
         stripFocus = resolveCurrentIndex();
-        int size = channels.size();
-        int visibleCount = Math.min(stripVisibleCount, size);
-        stripWindowStart = clamp(stripFocus - visibleCount / 2, 0,
-                Math.max(0, size - visibleCount));
+        clampStripWindow();
         stripOpen = true;
-        stripCard.animate().cancel();
-        stripCard.setAlpha(0f);
-        stripCard.setVisibility(View.VISIBLE);
-        stripCard.animate().alpha(1f).setDuration(FADE_MS).start();
+        handler.removeCallbacks(hideRunnable);
+        strip.animate().cancel();
+        strip.setVisibility(View.VISIBLE);
+        strip.setAlpha(0f);
+        strip.setTranslationX(-Tv.dp(context, 12));
+        strip.animate().alpha(1f).translationX(0f).setDuration(FADE_MS).start();
         rebuildStrip();
-        updateHint();
-        refreshPlayPauseBackground();
     }
 
-    private void collapseStrip() {
+    private void collapseStrip(boolean animate) {
         if (!stripOpen) {
             return;
         }
         stripOpen = false;
         stripFocus = -1;
-        stripCard.animate().cancel();
-        stripCard.setVisibility(View.GONE);
+        strip.animate().cancel();
+        if (animate) {
+            strip.animate().alpha(0f).setDuration(110L)
+                    .withEndAction(() -> {
+                        if (!stripOpen) {
+                            strip.setVisibility(View.GONE);
+                        }
+                    }).start();
+        } else {
+            strip.setVisibility(View.GONE);
+        }
         stripRows.removeAllViews();
-        updateHint();
-        refreshPlayPauseBackground();
+        scheduleHide();
     }
 
     private void moveStrip(int delta) {
-        int size = channels.size();
-        if (size == 0) {
+        if (channels.isEmpty()) {
             return;
         }
-        int next = clamp(stripFocus + delta, 0, size - 1);
-        if (next == stripFocus) {
+        if (stripFocus < 0) {
+            if (delta > 0) {
+                stripFocus = 0;
+            }
+            rebuildStrip();
+            return;
+        }
+        int next = stripFocus + delta;
+        if (next < 0) {
+            stripFocus = -1;
+            rebuildStrip();
+            return;
+        }
+        if (next >= channels.size()) {
             return;
         }
         stripFocus = next;
-        int visibleCount = Math.min(stripVisibleCount, size);
+        int visibleCount = Math.min(stripVisibleCount, channels.size());
         if (stripFocus < stripWindowStart) {
             stripWindowStart = stripFocus;
         } else if (stripFocus >= stripWindowStart + visibleCount) {
             stripWindowStart = stripFocus - visibleCount + 1;
         }
-        stripWindowStart = clamp(stripWindowStart, 0,
-                Math.max(0, size - visibleCount));
         rebuildStrip();
-        scheduleHide();
     }
 
     private void pickStripChannel() {
-        int size = channels.size();
-        if (stripFocus < 0 || stripFocus >= size) {
-            collapseStrip();
+        if (stripFocus < 0 || stripFocus >= channels.size()) {
             return;
         }
-        final Channel chosen = channels.get(stripFocus);
-        collapseStrip();
+        Channel chosen = channels.get(stripFocus);
+        collapseStrip(false);
         scheduleHide();
         Callback target = callback;
         if (target != null) {
@@ -762,95 +738,118 @@ public final class PlayerOverlay {
         }
     }
 
-    private void rebuildStrip() {
-        stripRows.removeAllViews();
+    private void clampStripWindow() {
         int size = channels.size();
         if (size == 0) {
-            TextView empty = label(13, TEXT_TERTIARY, false);
-            empty.setText("No channels");
-            empty.setPadding(dp(10), dp(8), dp(10), dp(8));
-            stripRows.addView(empty, matchWrap());
+            stripWindowStart = 0;
             return;
         }
         int visibleCount = Math.min(stripVisibleCount, size);
-        int start = clamp(stripWindowStart, 0, Math.max(0, size - visibleCount));
+        stripWindowStart = Math.max(0, Math.min(stripWindowStart,
+                Math.max(0, size - visibleCount)));
+    }
+
+    private void rebuildStrip() {
+        stripRows.removeAllViews();
+        int size = channels.size();
+        stripQuality.setBackground(stripFocus < 0
+                ? Tv.box(context, Tv.SURFACE_3, 7f, 0xFFFFFFFF, 2f)
+                : Tv.box(context, 0x00000000, 7f, 0, 0f));
+        if (size == 0) {
+            TextView empty = Tv.text(context, 13f, Tv.TEXT_3, false);
+            empty.setText(R.string.player_channels_empty);
+            empty.setPadding(Tv.dp(context, 10), Tv.dp(context, 12),
+                    Tv.dp(context, 10), Tv.dp(context, 12));
+            stripRows.addView(empty);
+            return;
+        }
+        int visibleCount = Math.min(stripVisibleCount, size);
+        int start = Math.max(0, Math.min(stripWindowStart, Math.max(0, size - visibleCount)));
         stripWindowStart = start;
         for (int i = start; i < start + visibleCount; i++) {
             stripRows.addView(buildStripRow(i, channels.get(i)));
         }
     }
 
-    private View buildStripRow(final int index, Channel channel) {
-        final boolean focused = index == stripFocus;
+    private View buildStripRow(int index, Channel channel) {
+        boolean focused = index == stripFocus;
+        boolean current = channel.getNumber() == channelNumberValue;
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(10), 0, dp(10), 0);
-        row.setBackground(rowBackground(focused));
-        row.setClickable(true);
-        row.setFocusable(false);
+        row.setPadding(Tv.dp(context, 10), 0, Tv.dp(context, 10), 0);
+        row.setBackground(focused
+                ? Tv.box(context, Tv.SURFACE_3, 7f, 0xFFFFFFFF, 2f)
+                : current ? Tv.box(context, 0x1FE6007E, 7f, Tv.STROKE, 1f)
+                : Tv.box(context, 0x00000000, 7f, 0, 0f));
 
-        TextView number = label(STRIP_NUMBER_SP, ACCENT, true);
+        if (current) {
+            View tally = new View(context);
+            tally.setBackgroundColor(Tv.BRAND);
+            LinearLayout.LayoutParams tallyLp = new LinearLayout.LayoutParams(
+                    Math.max(2, Tv.dp(context, 3)), Tv.dp(context, 22));
+            tallyLp.rightMargin = Tv.dp(context, 9);
+            row.addView(tally, tallyLp);
+        }
+
+        TextView number = Tv.numeral(context, 17f,
+                current ? Tv.BRAND_BRIGHT : Tv.TEXT_2);
         number.setText(channel.getNumber() >= 0
-                ? String.valueOf(channel.getNumber()) : "\u2014");
-        row.addView(number, new LinearLayout.LayoutParams(dp(44),
-                ViewGroup.LayoutParams.WRAP_CONTENT));
+                ? String.valueOf(channel.getNumber()) : "—");
+        number.setGravity(Gravity.END);
+        row.addView(number, new LinearLayout.LayoutParams(
+                Tv.dp(context, 42), ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        TextView name = label(STRIP_NAME_SP,
-                focused ? TEXT_PRIMARY : 0xFFD7DEE8, false);
+        LinearLayout texts = new LinearLayout(context);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams textLp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        textLp.leftMargin = Tv.dp(context, 14);
+        row.addView(texts, textLp);
+
+        TextView name = Tv.displayText(context, 15f,
+                focused ? 0xFFFFFFFF : Tv.TEXT);
         name.setSingleLine(true);
         name.setEllipsize(TextUtils.TruncateAt.END);
         name.setText(channel.getTitle());
-        row.addView(name, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        texts.addView(name);
 
-        boolean current = channelNumber >= 0 && channel.getNumber() == channelNumber;
-        TextView badge = label(STRIP_HINT_SP,
-                current ? ACCENT_BRIGHT : TEXT_TERTIARY, true);
-        badge.setAllCaps(true);
-        badge.setLetterSpacing(0.06f);
-        badge.setText(current ? "LIVE" : qualityOf(channel));
-        LinearLayout.LayoutParams badgeLp = wrapWrap();
-        badgeLp.leftMargin = dp(8);
-        row.addView(badge, badgeLp);
+        EpgProgram programme = EpgCache.programmeAt(channel.getNumber(),
+                System.currentTimeMillis());
+        TextView now = Tv.text(context, 10.5f, Tv.TEXT_3, false);
+        now.setSingleLine(true);
+        now.setEllipsize(TextUtils.TruncateAt.END);
+        now.setText(programme == null ? getString(R.string.channels_no_epg) : programme.title);
+        texts.addView(now);
 
         LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(STRIP_ROW_HEIGHT_DP));
-        rowLp.bottomMargin = dp(2);
+                ViewGroup.LayoutParams.MATCH_PARENT, Tv.dp(context, STRIP_ROW_HEIGHT_DP));
+        rowLp.bottomMargin = Tv.dp(context, 2);
         row.setLayoutParams(rowLp);
-        row.setContentDescription("Channel " + channel.getNumber() + ", "
-                + channel.getTitle());
-        row.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                stripFocus = index;
-                pickStripChannel();
-            }
+        row.setClickable(true);
+        row.setOnClickListener(view -> {
+            stripFocus = index;
+            pickStripChannel();
         });
         return row;
     }
 
-    /**
-     * Row count that actually fits between the top-left card and the bottom card. The
-     * panel is chrome + n * pitch tall, so a 540 dp-tall TV still shows the full seven
-     * rows while shorter layouts degrade to five or six instead of clipping.
-     */
     private int computeStripRowCount() {
-        int available = bottomColumn.getTop() - topLeftCard.getBottom() - dp(8);
+        int available = overlay.getHeight()
+                - Tv.dp(context, 156 + 24 + 38 + 18 + 30);
         if (available <= 0) {
-            return STRIP_MAX_ROWS;
+            return STRIP_MIN_ROWS;
         }
-        int rows = (available - dp(STRIP_CHROME_DP)) / dp(STRIP_ROW_PITCH_DP);
+        int rows = available / Tv.dp(context, STRIP_ROW_HEIGHT_DP);
         return Math.max(STRIP_MIN_ROWS, Math.min(STRIP_MAX_ROWS, rows));
     }
 
-    /** Current channel by number first, stale list index only as a fallback. */
     private int resolveCurrentIndex() {
         int size = channels.size();
         if (size == 0) {
-            return -1;
+            return 0;
         }
-        int byNumber = channelNumber >= 0 ? indexOfNumber(channelNumber) : -1;
+        int byNumber = channelNumberValue >= 0 ? indexOfNumber(channelNumberValue) : -1;
         if (byNumber >= 0) {
             return byNumber;
         }
@@ -872,172 +871,103 @@ public final class PlayerOverlay {
         return -1;
     }
 
-    private static String qualityOf(Channel channel) {
-        String quality = channel.getQuality();
-        return TextUtils.isEmpty(quality) ? "HD" : quality;
-    }
-
     // ------------------------------------------------------------------ state
 
-    private void updateLivePill() {
-        livePill.setText(live ? "LIVE" : "TIME SHIFT");
-        livePill.setBackground(box(live ? ACCENT : TIME_SHIFT_BG, 5, 0, 0));
+    private void updateState() {
+        channelState.setText(live ? R.string.player_live : R.string.player_time_shift);
+        channelState.setTextColor(live ? Tv.BRAND_BRIGHT : Tv.WARNING);
     }
 
-    private void updateResolutionChip() {
-        if (TextUtils.isEmpty(resolution)) {
-            resolutionChip.setVisibility(View.GONE);
-        } else {
-            resolutionChip.setText(resolution);
-            resolutionChip.setVisibility(View.VISIBLE);
+    private void updateQuality() {
+        QualityPreference.Quality quality = QualityPreference.get(context);
+        String label;
+        switch (quality) {
+            case MAX:
+                label = getString(R.string.quality_short_max);
+                break;
+            case SAVER:
+                label = getString(R.string.quality_short_saver);
+                break;
+            default:
+                label = getString(R.string.quality_short_auto);
+                break;
+        }
+        qualityValue.setText(label);
+        stripQualityValue.setText(label);
+    }
+
+    private void cycleQuality() {
+        QualityPreference.Quality nextQuality = QualityPreference.get(context).next();
+        QualityPreference.set(context, nextQuality);
+        updateQuality();
+        Callback target = callback;
+        if (target != null) {
+            target.onQualityChanged();
         }
     }
 
     private void updatePlayGlyph() {
-        playPause.setText(playing ? "\u25AE\u25AE" : "\u25B6");
-        playPause.setContentDescription(playing ? "Pause" : "Play");
+        playPause.setImageResource(playing ? R.drawable.ic_pause : R.drawable.ic_play);
+        playPause.setContentDescription(getString(
+                playing ? R.string.player_pause : R.string.player_play));
     }
 
     private void updateProgramme() {
-        boolean hasTitle = !TextUtils.isEmpty(programmeTitleText);
-        programmeTitle.setText(programmeTitleText);
-        programmeTitle.setVisibility(hasTitle ? View.VISIBLE : View.GONE);
-
+        programmeTitle.setText(TextUtils.isEmpty(programmeTitleText)
+                ? getString(R.string.player_title_fallback) : programmeTitleText);
         String time = programmeTimeText;
         if (TextUtils.isEmpty(time)
                 && programmeStartMs > 0 && programmeEndMs > programmeStartMs) {
-            time = clockFormat.format(new Date(programmeStartMs))
-                    + " \u2013 " + clockFormat.format(new Date(programmeEndMs));
+            time = clock.format(new Date(programmeStartMs))
+                    + " – " + clock.format(new Date(programmeEndMs));
         }
-        boolean hasTime = !TextUtils.isEmpty(time);
         programmeTime.setText(time);
-        programmeTime.setVisibility(hasTime ? View.VISIBLE : View.GONE);
+        programmeTime.setVisibility(TextUtils.isEmpty(time) ? View.GONE : View.VISIBLE);
+    }
+
+    private void refreshNext() {
+        if (channelNumberValue < 0) {
+            next.setVisibility(View.GONE);
+            return;
+        }
+        long now = System.currentTimeMillis();
+        EpgProgram upcoming = EpgCache.next(channelNumberValue, now);
+        if (upcoming == null) {
+            next.setVisibility(View.GONE);
+            return;
+        }
+        next.setText(getString(R.string.player_next_label) + "  "
+                + upcoming.title + "  " + clock.format(new Date(upcoming.startMs)));
+        next.setVisibility(View.VISIBLE);
     }
 
     private void updateProgress() {
         long now = System.currentTimeMillis();
         float fraction = -1f;
-
         if (!live && durationMs > 0) {
-            // Time-shift/catch-up: where the playhead is in the recording.
             fraction = positionMs / (float) durationMs;
-        } else if (live && !(programmeStartMs > 0 && programmeEndMs > programmeStartMs)) {
-            // Nothing meaningful to show for a live stream without EPG context.
-            fraction = -1f;
-        } else if (programmeStartMs > 0 && programmeEndMs > programmeStartMs) {
-            // Live: progress through the current programme's wall-clock span.
+        } else if (live && programmeStartMs > 0 && programmeEndMs > programmeStartMs) {
             fraction = (now - programmeStartMs)
                     / (float) (programmeEndMs - programmeStartMs);
         } else if (durationMs > 0) {
             fraction = positionMs / (float) durationMs;
         }
-
         if (fraction < 0f) {
-            progress.setVisibility(View.GONE);
+            progress.setVisibility(View.INVISIBLE);
             return;
         }
-        if (fraction > 1f) {
-            fraction = 1f;
-        }
         progress.setVisibility(View.VISIBLE);
-        progress.setProgress(Math.round(fraction * 1000f));
+        progress.setProgress(Math.round(Math.max(0f, Math.min(1f, fraction)) * 1000f));
     }
-
-    private void updateHint() {
-        hint.setText(stripOpen ? HINT_STRIP : HINT_NORMAL);
-    }
-
-    private void updateClock() {
-        clock.setText(clockFormat.format(new Date()));
-    }
-
-    // --------------------------------------------------------------- lifecycle
 
     private void scheduleHide() {
         handler.removeCallbacks(hideRunnable);
-        if (visible && !released) {
+        if (visible && !released && !stripOpen) {
             handler.postDelayed(hideRunnable, AUTO_HIDE_MS);
         }
     }
 
-    private void scheduleClock() {
-        handler.removeCallbacks(clockRunnable);
-        if (!visible || released) {
-            return;
-        }
-        long now = System.currentTimeMillis();
-        long untilNextMinute = CLOCK_PERIOD_MS - (now % CLOCK_PERIOD_MS);
-        handler.postDelayed(clockRunnable, Math.max(1_000L, untilNextMinute));
-    }
-
-    // ------------------------------------------------------------------ drawing
-
-    private void refreshPlayPauseBackground() {
-        boolean active = visible && !stripOpen;
-        boolean highlighted = active || playPause.hasFocus();
-        int fill = highlighted ? 0x2EE6007E : 0x1FFFFFFF;
-        int stroke = highlighted ? ACCENT : 0x33FFFFFF;
-        float strokeWidth = highlighted ? 2f : 1f;
-        playPause.setBackground(box(fill, 12, stroke, strokeWidth));
-        playPause.setTextColor(highlighted ? WHITE : TEXT_PRIMARY);
-    }
-
-    private Drawable cardBackground(float radiusDp) {
-        return box(CARD_BG, radiusDp, CARD_STROKE, 1f);
-    }
-
-    private Drawable panelBackground(float radiusDp) {
-        return box(PANEL_BG, radiusDp, PANEL_STROKE, 1f);
-    }
-
-    private Drawable rowBackground(boolean focused) {
-        if (focused) {
-            return box(0x26E6007E, 9, ACCENT, 2f);
-        }
-        return box(0x0DFFFFFF, 9, 0, 0);
-    }
-
-    private Drawable box(int fill, float radiusDp, int strokeColor, float strokeDp) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setShape(GradientDrawable.RECTANGLE);
-        drawable.setColor(fill);
-        drawable.setCornerRadius(dp(radiusDp));
-        if (strokeDp > 0f) {
-            drawable.setStroke(Math.max(1, dp(strokeDp)), strokeColor);
-        }
-        return drawable;
-    }
-
-    private TextView label(float sp, int color, boolean medium) {
-        TextView view = new TextView(context);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
-        view.setTextColor(color);
-        view.setTypeface(Typeface.create(
-                medium ? "sans-serif-medium" : "sans-serif", Typeface.NORMAL));
-        view.setIncludeFontPadding(false);
-        return view;
-    }
-
-    private LinearLayout.LayoutParams matchWrap() {
-        return new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
-    }
-
-    private LinearLayout.LayoutParams wrapWrap() {
-        return new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
-    }
-
-    private int dp(float value) {
-        return Math.round(value * context.getResources().getDisplayMetrics().density);
-    }
-
-    private static int clamp(int value, int min, int max) {
-        if (value < min) {
-            return min;
-        }
-        return Math.min(value, max);
+    private String getString(int res) {
+        return context.getString(res);
     }
 }

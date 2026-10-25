@@ -10,6 +10,8 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.CompoundButton;
+import android.widget.TextView;
 import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -21,6 +23,7 @@ import local.mintv.data.Session;
 import local.mintv.net.ApiException;
 import local.mintv.net.MinTvApi;
 import local.mintv.net.HttpMinTvApi;
+import local.mintv.ui.Tv;
 
 /**
  * Login screen. The only backend dependency is {@link MinTvApi}; milestone 1 injects
@@ -37,7 +40,7 @@ public final class LoginActivity extends Activity {
 
     private EditText usernameInput;
     private EditText passwordInput;
-    private CheckBox rememberPassword;
+    private CompoundButton rememberPassword;
     private Button loginButton;
     private ProgressBar loginProgress;
     private TextView loginStatus;
@@ -55,6 +58,10 @@ public final class LoginActivity extends Activity {
         loginButton = findViewById(R.id.button_login);
         loginProgress = findViewById(R.id.login_progress);
         loginStatus = findViewById(R.id.login_status);
+
+        TextView skip = findViewById(R.id.button_skip);
+        skip.setOnClickListener(view -> finish());
+        Tv.focusScale(skip, 1.03f);
 
         String savedUser = CredentialStore.username(this);
         String savedPassword = CredentialStore.password(this);

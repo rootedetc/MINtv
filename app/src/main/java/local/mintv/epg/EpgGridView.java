@@ -27,6 +27,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
 
+import local.mintv.R;
+
 /**
  * A TiviMate-style EPG grid rendered on a single {@link Canvas}.
  *
@@ -110,20 +112,20 @@ public final class EpgGridView extends View {
     private static final long SLOT_MS = 30L * 60L * 1000L;    // ruler tick / label spacing
     private static final int SLOT_COUNT = 49;                 // 00:00 .. 24:00 inclusive
 
-    private static final int CHANNEL_COLUMN_DP = 210;
-    private static final int RULER_HEIGHT_DP = 44;
-    private static final int ROW_HEIGHT_DP = 72;
+    private static final int CHANNEL_COLUMN_DP = 244;
+    private static final int RULER_HEIGHT_DP = 40;
+    private static final int ROW_HEIGHT_DP = 52;
 
     private static final int BLOCK_RADIUS_DP = 6;
-    private static final int BLOCK_GAP_DP = 1;                // per side -> 2 dp between blocks
-    private static final int BLOCK_INSET_DP = 2;              // top/bottom inside the row
-    private static final int BLOCK_TEXT_PAD_DP = 7;
+    private static final int BLOCK_GAP_DP = 2;                // per side -> 2 dp between blocks
+    private static final int BLOCK_INSET_DP = 3;              // top/bottom inside the row
+    private static final int BLOCK_TEXT_PAD_DP = 10;
     private static final int FOCUS_STROKE_DP = 2;
 
-    private static final int CELL_PAD_DP = 10;
-    private static final int NUMBER_COLUMN_DP = 40;
-    private static final int LOGO_WIDTH_DP = 46;
-    private static final int LOGO_HEIGHT_DP = 30;
+    private static final int CELL_PAD_DP = 12;
+    private static final int NUMBER_COLUMN_DP = 42;
+    private static final int LOGO_WIDTH_DP = 48;
+    private static final int LOGO_HEIGHT_DP = 32;
     private static final int LOGO_GAP_DP = 8;
     private static final int TITLE_GAP_DP = 9;
 
@@ -134,25 +136,29 @@ public final class EpgGridView extends View {
     private static final int SCROLL_DURATION_MS = 220;
     private static final long LIVE_TICK_MS = 60_000L;
 
-    private static final float TITLE_SP = 14.5f;
+    private static final float TITLE_SP = 14f;
     private static final float TIME_SP = 10.5f;
-    private static final float NUMBER_SP = 18f;
-    private static final float CHANNEL_TITLE_SP = 13f;
+    private static final float NUMBER_SP = 21f;
+    private static final float CHANNEL_TITLE_SP = 13.5f;
     private static final float LOGO_NUMBER_SP = 12f;
-    private static final float RULER_SP = 11f;
-    private static final float DAY_SP = 11.5f;
+    private static final float RULER_SP = 12f;
+    private static final float DAY_SP = 12.5f;
     private static final float EMPTY_SP = 16f;
 
-    private static final String EMPTY_MESSAGE = "Nema podataka";
+    private final String emptyMessage;
+    private final String nowLabel;
+    private final String dayLabel;
     private static final String DASH = "—";
     private static final String ELLIPSIS = "…";
 
     // Default dark palette (mirrors the app's colors.xml so the grid fits the rest of the UI).
     private int accentColor = 0xFFE6007E;
-    private int backgroundColor = 0xFF0A0C10;
-    private int surfaceColor = 0xFF14171D;
-    private int textPrimaryColor = 0xFFF5F7FA;
-    private int textDimColor = 0xFF98A2B3;
+    private int accentBrightColor = 0xFFFF3D9A;
+    private int backgroundColor = 0xFF07080B;
+    private int raisedColor = 0xFF0B0D11;
+    private int surfaceColor = 0xFF12151B;
+    private int textPrimaryColor = 0xFFF4F6F9;
+    private int textDimColor = 0xFFAEB6C2;
 
     // Derived colours, recomputed by applyPalette().
     private int rowEvenColor;
@@ -162,11 +168,14 @@ public final class EpgGridView extends View {
     private int dividerColor;
     private int gridLineColor;
     private int blockFillColor;
+    private int blockLiveFillColor;
+    private int blockPastFillColor;
     private int blockFocusFillColor;
     private int channelFocusFillColor;
     private int placeholderColor;
     private int progressTrackColor;
     private int borderColor;
+    private int textPastColor;
 
     private final float density;
 
@@ -197,7 +206,10 @@ public final class EpgGridView extends View {
     private final Paint channelTitlePaint;
     private final Paint logoNumberPaint;
     private final Paint rulerPaint;
+    private final Paint rulerMinorPaint;
     private final Paint dayPaint;
+    private final Paint dayLabelPaint;
+    private final Paint nowPaint;
     private final Paint emptyPaint;
     private final Paint dashPaint;
 
@@ -340,15 +352,22 @@ public final class EpgGridView extends View {
         logoPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         logoPaint.setStyle(Paint.Style.FILL);
 
-        titlePaint = createTextPaint(TITLE_SP, Typeface.DEFAULT);
+        titlePaint = createTextPaint(TITLE_SP, local.mintv.ui.Tv.display(getContext()));
         timePaint = createTextPaint(TIME_SP, Typeface.DEFAULT);
-        channelNumberPaint = createTextPaint(NUMBER_SP, Typeface.DEFAULT_BOLD);
-        channelTitlePaint = createTextPaint(CHANNEL_TITLE_SP, Typeface.DEFAULT);
-        logoNumberPaint = createTextPaint(LOGO_NUMBER_SP, Typeface.DEFAULT_BOLD);
+        channelNumberPaint = createTextPaint(NUMBER_SP,
+                local.mintv.ui.Tv.displayBold(getContext()));
+        channelTitlePaint = createTextPaint(CHANNEL_TITLE_SP,
+                local.mintv.ui.Tv.displayMedium(getContext()));
+        logoNumberPaint = createTextPaint(LOGO_NUMBER_SP,
+                local.mintv.ui.Tv.displayBold(getContext()));
         rulerPaint = createTextPaint(RULER_SP, Typeface.DEFAULT);
-        dayPaint = createTextPaint(DAY_SP, Typeface.DEFAULT_BOLD);
+        rulerMinorPaint = createTextPaint(RULER_SP - 1f, Typeface.DEFAULT);
+        dayPaint = createTextPaint(10.5f, local.mintv.ui.Tv.displayMedium(getContext()));
+        dayLabelPaint = createTextPaint(9f, Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        nowPaint = createTextPaint(11f, local.mintv.ui.Tv.displayBold(getContext()));
         emptyPaint = createTextPaint(EMPTY_SP, Typeface.DEFAULT);
-        dashPaint = createTextPaint(CHANNEL_TITLE_SP, Typeface.DEFAULT);
+        dashPaint = createTextPaint(CHANNEL_TITLE_SP,
+                local.mintv.ui.Tv.displayMedium(getContext()));
 
         blockRadiusPx = dp(BLOCK_RADIUS_DP);
         blockGapPx = dp(BLOCK_GAP_DP);
@@ -375,8 +394,12 @@ public final class EpgGridView extends View {
         dashHalfWidthPx = dashPaint.measureText(DASH) / 2f;
         dashBaselineOffset = -(dashPaint.ascent() + dashPaint.descent()) / 2f;
 
+        emptyMessage = getContext().getString(R.string.guide_empty);
+        nowLabel = getContext().getString(R.string.guide_now).toUpperCase(Locale.getDefault());
+        dayLabel = getContext().getString(R.string.guide_corner_label)
+                .toUpperCase(Locale.getDefault());
         timeFormatter = new SimpleDateFormat("HH:mm", Locale.US);
-        dayFormatter = new SimpleDateFormat("EEE d.M.", Locale.getDefault());
+        dayFormatter = new SimpleDateFormat("d. MMM", Locale.getDefault());
         timeFormatter.setTimeZone(TimeZone.getDefault());
         dayFormatter.setTimeZone(TimeZone.getDefault());
         zoneId = TimeZone.getDefault().getID();
@@ -523,9 +546,9 @@ public final class EpgGridView extends View {
         for (int i = 0; i < channels.size(); i++) {
             if (channels.get(i).number == channelNumber) {
                 verticalAnchorValid = false;
-                EpgProgram focused = focusedProgram();
-                long anchor = focused != null ? focused.startMs : currentNowMs();
-                setFocus(i, indexAt(channels.get(i), anchor), false);
+                // A channel jump lands on what is on now, not on whatever time the
+                // previous row happened to be focused on.
+                setFocus(i, indexAt(channels.get(i), currentNowMs()), false);
                 ensureProgramVisible(true, false);
                 // Explicit focus request: always tell the listener, even when the
                 // selection happens to be the same programme as before.
@@ -533,6 +556,15 @@ public final class EpgGridView extends View {
                 return;
             }
         }
+    }
+
+    /** True when LEFT cannot move to an earlier programme, so the shell may take focus. */
+    public boolean isTopRowFocused() {
+        return hasFocus() && focusRow == 0;
+    }
+
+    public boolean isFirstProgramFocused() {
+        return focusProgramIndex <= 0;
     }
 
     /** Starts/stops the once-per-minute internal invalidation used for the now line. */
@@ -549,8 +581,16 @@ public final class EpgGridView extends View {
 
     /** Optional theming hook; all arguments are ARGB colours. */
     public void setPalette(int accent, int background, int surface, int textPrimary, int textDim) {
+        setPalette(accent, accent, background, background, surface, textPrimary, textDim);
+    }
+
+    /** Full palette: brand, bright brand, ground, raised ruler, blocks, text. */
+    public void setPalette(int accent, int accentBright, int background, int raised,
+                           int surface, int textPrimary, int textDim) {
         accentColor = accent;
+        accentBrightColor = accentBright;
         backgroundColor = background;
+        raisedColor = raised;
         surfaceColor = surface;
         textPrimaryColor = textPrimary;
         textDimColor = textDim;
@@ -700,25 +740,31 @@ public final class EpgGridView extends View {
 
     private void applyPalette() {
         rowEvenColor = backgroundColor;
-        rowAltColor = blend(backgroundColor, surfaceColor, 0.45f);
-        channelBackgroundColor = blend(backgroundColor, surfaceColor, 0.55f);
-        rulerBackgroundColor = blend(backgroundColor, surfaceColor, 0.75f);
-        dividerColor = blend(backgroundColor, textDimColor, 0.18f);
-        gridLineColor = blend(backgroundColor, textDimColor, 0.10f);
-        blockFillColor = surfaceColor;
-        blockFocusFillColor = blend(surfaceColor, 0xFFFFFFFF, 0.10f);
-        channelFocusFillColor = blend(surfaceColor, accentColor, 0.16f);
-        placeholderColor = blend(surfaceColor, textDimColor, 0.12f);
-        progressTrackColor = blend(surfaceColor, textPrimaryColor, 0.18f);
-        borderColor = blend(backgroundColor, textDimColor, 0.22f);
+        rowAltColor = blend(backgroundColor, surfaceColor, 0.22f);
+        channelBackgroundColor = blend(backgroundColor, surfaceColor, 0.48f);
+        rulerBackgroundColor = raisedColor;
+        dividerColor = blend(backgroundColor, 0xFFFFFFFF, 0.075f);
+        gridLineColor = blend(backgroundColor, 0xFFFFFFFF, 0.045f);
+        blockFillColor = blend(backgroundColor, surfaceColor, 0.72f);
+        blockLiveFillColor = blend(blockFillColor, accentColor, 0.10f);
+        blockPastFillColor = blend(backgroundColor, surfaceColor, 0.30f);
+        blockFocusFillColor = blend(surfaceColor, 0xFFFFFFFF, 0.16f);
+        channelFocusFillColor = blend(surfaceColor, 0xFFFFFFFF, 0.08f);
+        placeholderColor = blend(backgroundColor, 0xFFFFFFFF, 0.06f);
+        progressTrackColor = blend(backgroundColor, 0xFFFFFFFF, 0.18f);
+        borderColor = blend(backgroundColor, 0xFFFFFFFF, 0.11f);
+        textPastColor = blend(textDimColor, backgroundColor, 0.28f);
 
         titlePaint.setColor(textPrimaryColor);
         timePaint.setColor(textDimColor);
-        channelNumberPaint.setColor(accentColor);
+        channelNumberPaint.setColor(accentBrightColor);
         channelTitlePaint.setColor(textPrimaryColor);
         logoNumberPaint.setColor(textDimColor);
         rulerPaint.setColor(textDimColor);
-        dayPaint.setColor(textDimColor);
+        rulerMinorPaint.setColor(blend(textDimColor, backgroundColor, 0.42f));
+        dayPaint.setColor(textPrimaryColor);
+        dayLabelPaint.setColor(accentBrightColor);
+        nowPaint.setColor(0xFFFFFFFF);
         emptyPaint.setColor(textDimColor);
         dashPaint.setColor(blend(surfaceColor, textDimColor, 0.55f));
     }
@@ -870,21 +916,30 @@ public final class EpgGridView extends View {
         float top = rowTop + blockInsetPx;
         float bottom = rowTop + rowHeightPx - blockInsetPx;
 
+        boolean live = program.isLive(now);
+        boolean past = program.endMs <= now;
+
         blockRect.set(left, top, right, bottom);
-        fillPaint.setColor(focused ? blockFocusFillColor : blockFillColor);
+        fillPaint.setColor(focused
+                ? blockFocusFillColor
+                : live ? blockLiveFillColor : past ? blockPastFillColor : blockFillColor);
         canvas.drawRoundRect(blockRect, blockRadiusPx, blockRadiusPx, fillPaint);
 
         float textLeft = left + blockTextPadPx;
         float available = right - textLeft - blockTextPadPx;
         if (available > dp(18f)) {
             ProgramText text = programText(program, available);
+            titlePaint.setColor(focused ? 0xFFFFFFFF
+                    : past ? textPastColor : textPrimaryColor);
+            timePaint.setColor(focused ? 0xFFE9D4DF
+                    : past ? blend(textPastColor, backgroundColor, 0.2f) : textDimColor);
             canvas.drawText(text.title, textLeft, top + titleBaselineOffset, titlePaint);
             if (text.timeWidthPx <= available) {
                 canvas.drawText(text.time, textLeft, top + timeBaselineOffset, timePaint);
             }
         }
 
-        if (program.isLive(now) && right - left > dp(14f)) {
+        if (live && right - left > dp(14f)) {
             float barLeft = textLeft;
             float barRight = right - blockTextPadPx;
             float barTop = bottom - progressBottomPx - progressHeightPx;
@@ -900,7 +955,8 @@ public final class EpgGridView extends View {
         }
 
         if (focused) {
-            strokePaint.setColor(accentColor);
+            // White ring: the native TV focus language. Magenta stays reserved for on-air.
+            strokePaint.setColor(0xFFFFFFFF);
             rectF.set(blockRect);
             rectF.inset(strokeInsetPx, strokeInsetPx);
             float radius = Math.max(0f, blockRadiusPx - strokeInsetPx);
@@ -928,23 +984,42 @@ public final class EpgGridView extends View {
                 (int) Math.ceil((visibleEndMs - dayStartMs) / (double) SLOT_MS));
 
         hairlinePaint.setColor(dividerColor);
-        float labelBaseline = rulerHeightPx - dp(11f);
+        float labelBaseline = rulerHeightPx - dp(10f);
+        boolean hasNow = now >= dayStartMs && now < dayStartMs + DAY_MS;
+        float nowVisibleX = hasNow ? timeToX(now) - scrollXPx : -1f;
+        String nowText = hasNow ? nowLabel : "";
+        float nowWidth = hasNow ? nowPaint.measureText(nowText) + dp(16f) : 0f;
+        float nowVisibleLeft = hasNow ? Math.max(dp(2f),
+                Math.min(nowVisibleX - nowWidth / 2f, gridW - nowWidth - dp(2f))) : -1f;
         for (int slot = firstSlot; slot <= lastSlot; slot++) {
-            float x = timeToX(dayStartMs + slot * SLOT_MS);
-            canvas.drawRect(x, rulerHeightPx - tickHeightPx,
-                    x + hairlineWidthPx, rulerHeightPx, hairlinePaint);
+            long slotMs = dayStartMs + slot * SLOT_MS;
+            float x = timeToX(slotMs);
+            boolean hour = (slot & 1) == 0;
+            hairlinePaint.setColor(hour ? dividerColor : blend(dividerColor, backgroundColor, 0.45f));
+            float tickTop = rulerHeightPx - (hour ? dp(8f) : dp(5f));
+            canvas.drawRect(x, tickTop, x + hairlineWidthPx, rulerHeightPx, hairlinePaint);
             String label = rulerLabels[slot];
             if (label != null) {
-                canvas.drawText(label, x + dp(5f), labelBaseline, rulerPaint);
+                float labelVisibleX = x - scrollXPx;
+                boolean hiddenByNow = hasNow
+                        && labelVisibleX + dp(28f) > nowVisibleLeft
+                        && labelVisibleX < nowVisibleLeft + nowWidth;
+                if (!hiddenByNow) {
+                    Paint paint = hour ? rulerPaint : rulerMinorPaint;
+                    canvas.drawText(label, x + dp(6f), labelBaseline, paint);
+                }
             }
         }
 
-        if (now >= dayStartMs && now < dayStartMs + DAY_MS) {
-            float x = timeToX(now);
+        // The on-air tally: a solid magenta tab carries the current minute into the ruler.
+        if (hasNow) {
+            float tabLeft = scrollXPx + nowVisibleLeft;
+            float tabTop = dp(2f);
+            rectF.set(tabLeft, tabTop, tabLeft + nowWidth, tabTop + dp(21f));
             fillPaint.setColor(accentColor);
-            rectF.set(x - dp(5f), rulerHeightPx - dp(8f),
-                    x + dp(5f), rulerHeightPx - dp(2f));
-            canvas.drawRoundRect(rectF, dp(3f), dp(3f), fillPaint);
+            canvas.drawRoundRect(rectF, dp(4f), dp(4f), fillPaint);
+            float baseline = tabTop + (dp(21f) - (nowPaint.ascent() + nowPaint.descent())) / 2f;
+            canvas.drawText(nowText, tabLeft + dp(8f), baseline, nowPaint);
         }
 
         canvas.restore();
@@ -971,8 +1046,8 @@ public final class EpgGridView extends View {
 
             if (focused) {
                 fillPaint.setColor(accentColor);
-                canvas.drawRect(0f, top + dp(3f),
-                        dp(3f), top + rowHeightPx - dp(3f), fillPaint);
+                canvas.drawRect(0f, top + dp(4f),
+                        Math.max(2f, dp(3f)), top + rowHeightPx - dp(4f), fillPaint);
             }
 
             drawChannelCell(canvas, channels.get(row), top, titleLeft, titleWidth);
@@ -989,6 +1064,8 @@ public final class EpgGridView extends View {
                                  float titleLeft, float titleWidth) {
         float centerY = rowTop + rowHeightPx / 2f;
         ChannelText text = channelText(channel, titleWidth);
+        boolean focused = ((int) (rowTop / rowHeightPx)) == focusRow;
+        channelNumberPaint.setColor(focused ? accentBrightColor : textDimColor);
 
         float numberX = cellPadPx + numberColumnPx - text.numberWidthPx;
         float numberBaseline = centerY - (channelNumberPaint.ascent()
@@ -1004,7 +1081,7 @@ public final class EpgGridView extends View {
         Bitmap logo = logoProvider != null ? logoProvider.logoFor(channel) : null;
         if (logo != null && !logo.isRecycled()
                 && logo.getWidth() > 0 && logo.getHeight() > 0) {
-            float inset = dp(2f);
+            float inset = dp(3f);
             float boxLeft = rectF.left + inset;
             float boxTop = rectF.top + inset;
             float boxWidth = rectF.width() - inset * 2f;
@@ -1024,6 +1101,8 @@ public final class EpgGridView extends View {
         }
 
         if (text.title.length() > 0) {
+            channelTitlePaint.setColor(((int) (rowTop / rowHeightPx)) == focusRow
+                    ? 0xFFFFFFFF : textPrimaryColor);
             float titleBaseline = centerY - (channelTitlePaint.ascent()
                     + channelTitlePaint.descent()) / 2f;
             canvas.drawText(text.title, titleLeft, titleBaseline, channelTitlePaint);
@@ -1035,8 +1114,10 @@ public final class EpgGridView extends View {
         canvas.clipRect(0, 0, channelColumnW, rulerHeightPx);
         fillPaint.setColor(rulerBackgroundColor);
         canvas.drawRect(0f, 0f, channelColumnW, rulerHeightPx, fillPaint);
-        float baseline = rulerHeightPx / 2f - (dayPaint.ascent() + dayPaint.descent()) / 2f;
-        canvas.drawText(cornerLabel, cellPadPx, baseline, dayPaint);
+
+        float labelBaseline = rulerHeightPx / 2f
+                - (dayPaint.ascent() + dayPaint.descent()) / 2f;
+        canvas.drawText(dayLabel, cellPadPx, labelBaseline, dayPaint);
         canvas.restore();
     }
 
@@ -1057,9 +1138,12 @@ public final class EpgGridView extends View {
     }
 
     private void drawEmptyState(Canvas canvas, int w, int h) {
-        float textWidth = emptyPaint.measureText(EMPTY_MESSAGE);
+        float textWidth = emptyPaint.measureText(emptyMessage);
         float baseline = h / 2f - (emptyPaint.ascent() + emptyPaint.descent()) / 2f;
-        canvas.drawText(EMPTY_MESSAGE, (w - textWidth) / 2f, baseline, emptyPaint);
+        canvas.drawText(emptyMessage, (w - textWidth) / 2f, baseline, emptyPaint);
+        hairlinePaint.setColor(dividerColor);
+        canvas.drawRect(w / 2f - dp(22f), baseline + dp(14f),
+                w / 2f + dp(22f), baseline + dp(15f), hairlinePaint);
     }
 
     // ------------------------------------------------------------------------------------

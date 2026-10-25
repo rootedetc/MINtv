@@ -4,43 +4,103 @@
     <string name="brand_name">MIN</string>
     <string name="brand_accent">tv</string>
 
-    <!-- Channel list -->
-    <string name="channels_title">TV kanali</string>
-    <string name="status_loading">Učitavanje kanala…</string>
-    <string name="status_refreshing">Osvježavanje…</string>
-    <plurals name="status_live">
-        <item quantity="one">%1$d kanal · uživo</item>
-        <item quantity="few">%1$d kanala · uživo</item>
-        <item quantity="other">%1$d kanala · uživo</item>
+    <!-- App shell -->
+    <string name="nav_guide">Vodič</string>
+    <string name="nav_channels">Kanali</string>
+    <string name="nav_settings">Postavke</string>
+    <string name="shell_clock_content_description">Trenutno vrijeme %1$s</string>
+    <string name="shell_status_offline">Izvan mreže</string>
+    <plurals name="shell_status_channels">
+        <item quantity="one">%1$d kanal</item>
+        <item quantity="few">%1$d kanala</item>
+        <item quantity="other">%1$d kanala</item>
     </plurals>
-    <plurals name="status_cached">
-        <item quantity="one">Predmemorija · %1$d kanal</item>
-        <item quantity="few">Predmemorija · %1$d kanala</item>
-        <item quantity="other">Predmemorija · %1$d kanala</item>
-    </plurals>
-    <plurals name="status_offline">
-        <item quantity="one">Izvan mreže · predmemorija · %1$d kanal</item>
-        <item quantity="few">Izvan mreže · predmemorija · %1$d kanala</item>
-        <item quantity="other">Izvan mreže · predmemorija · %1$d kanala</item>
-    </plurals>
-    <string name="status_offline_short">Izvan mreže · predmemorija</string>
-    <string name="action_sign_in">Prijava</string>
-    <string name="action_refresh">Osvježi</string>
-    <string name="action_demo">Test player</string>
-    <string name="action_retry">Pokušaj ponovno</string>
-    <string name="error_title">Kanali nisu dostupni</string>
-    <string name="error_message">Provjeri vezu s internetom i pokušaj ponovno.</string>
-    <string name="error_no_stream">Ovaj kanal nema DASH adresu.</string>
-    <string name="channel_description">%1$s, kanal %2$d</string>
-    <string name="badge_free">FREE</string>
-    <string name="channel_footer_hint">Odaberi kanal · OK za reprodukciju</string>
-    <string name="channel_footer_version">v0.1 · neovisni klijent</string>
-    <string name="footer_signed_in">Prijavljen: %1$s</string>
+    <string name="shell_refreshing">Osvježavanje…</string>
+
+    <!-- Guide -->
+    <string name="guide_title">Vodič</string>
+    <string name="guide_today">Danas, %1$s</string>
+    <string name="guide_now">Sada</string>
+    <string name="guide_loading">Učitavanje vodiča…</string>
+    <string name="guide_empty">Nema podataka za ovaj dan.</string>
+    <string name="guide_error">Vodič se nije mogao učitati.</string>
+    <string name="guide_retry">Pokušaj ponovno</string>
+    <string name="guide_no_programmes">Nema rasporeda</string>
+    <string name="guide_live">UŽIVO</string>
+    <string name="guide_next">SLJEDEĆE</string>
+    <string name="guide_finished">ZAVRŠENO</string>
+    <string name="guide_start_over">Od početka</string>
+    <string name="guide_watch">Gledaj</string>
+    <string name="guide_watch_channel">Gledaj kanal</string>
+    <string name="guide_hint">OK: gledaj   ◀ ▶: vrijeme   ▲ ▼: kanal</string>
+    <string name="guide_time_range">%1$s – %2$s</string>
+    <string name="guide_duration_min">%1$d min</string>
+    <string name="guide_channel_meta">Kanal %1$d · %2$s</string>
+    <string name="guide_now_bubble">%1$s</string>
+    <string name="guide_selected_channel">Kanal %1$d</string>
+
+    <!-- Channels -->
+    <string name="channels_title">Kanali</string>
+    <string name="channels_filter_all">Svi</string>
+    <string name="channels_filter_free">Besplatni</string>
+    <string name="channels_filter_hd">HD</string>
+    <string name="channels_empty_filter">Nema kanala u ovom filtru.</string>
+    <string name="channels_loading">Učitavanje kanala…</string>
+    <string name="channels_error_title">Kanali nisu dostupni</string>
+    <string name="channels_error_body">Provjeri vezu s internetom i pokušaj ponovno.</string>
+    <string name="channels_retry">Pokušaj ponovno</string>
+    <string name="channels_hint">OK: gledaj   ◀ ▶ ▲ ▼: odaberi</string>
+    <string name="channels_free">BESPLATNO</string>
+    <string name="channel_free_accessibility">besplatan kanal</string>
+    <string name="channels_source_cached">Iz predmemorije</string>
+    <string name="channels_source_live">Ažurirano</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Postavke</string>
+    <string name="settings_account">Račun</string>
+    <string name="settings_playback">Reprodukcija</string>
+    <string name="settings_guide">Vodič</string>
+    <string name="settings_about">Informacije</string>
+    <string name="settings_account_hint">Prijava i sesija</string>
+    <string name="settings_playback_hint">Kvaliteta slike</string>
+    <string name="settings_guide_hint">Raspored i predmemorija</string>
+    <string name="settings_about_hint">Verzija i privatnost</string>
+    <string name="settings_account_signed_in">Prijavljeni ste</string>
+    <string name="settings_account_signed_out">Niste prijavljeni</string>
+    <string name="settings_account_body">Prijava je potrebna za kanale uz pretplatu i za gledanje od početka. Besplatni kanali rade bez prijave.</string>
+    <string name="settings_account_sign_in">Prijavi se</string>
+    <string name="settings_account_sign_out">Odjavi se</string>
+    <string name="settings_account_username">Korisničko ime</string>
+    <string name="settings_account_signed_in_as">Prijavljeni: %1$s</string>
+    <string name="settings_account_signed_out_as">Nije prijavljen nijedan račun.</string>
+    <string name="settings_playback_body">Kvaliteta se primjenjuje odmah. Tijekom gledanja možeš je promijeniti u izborniku kanala.</string>
+    <string name="quality_auto_title">Automatski</string>
+    <string name="quality_auto_body">Brzo pokretanje, zatim najbolja kvaliteta koju veza podnosi.</string>
+    <string name="quality_max_title">Maksimalno</string>
+    <string name="quality_max_body">1080p od prve sličice. Više podataka, bez prebacivanja.</string>
+    <string name="quality_saver_title">720p</string>
+    <string name="quality_saver_body">Manje podataka. Stabilnije na slaboj vezi.</string>
+    <string name="settings_guide_body">Vodič se dohvaća za cijeli dan i sprema na uređaj. Ručno osvježavanje zamjenjuje spremljenu kopiju.</string>
+    <string name="settings_guide_refresh">Osvježi vodič</string>
+    <string name="settings_guide_refreshing">Osvježavanje vodiča…</string>
+    <string name="settings_guide_refreshed">Vodič je osvježen.</string>
+    <string name="settings_guide_failed">Vodič se nije mogao osvježiti.</string>
+    <string name="settings_hint">▲ ▼: kategorija   ▶: otvori   BACK: vodič</string>
+    <string name="settings_about_version">Verzija %1$s</string>
+    <string name="settings_about_body">MINtv je neovisni klijent za MAXtv. Nije povezan s Hrvatskim Telekomom.</string>
+    <string name="settings_about_privacy">Bez analitike, oglasa i telemetrije.</string>
+    <string name="settings_about_vpn">MAXtv ne radi preko VPN-a. Isključi VPN prije gledanja.</string>
+    <string name="settings_about_data">Podaci: MAXtv kanali i EPG. Reprodukcija: Media3 i Widevine.</string>
+    <string name="settings_about_demo">Test player</string>
+    <string name="settings_about_demo_body">Javni DASH test za provjeru reprodukcije.</string>
+    <string name="settings_about_built">Napravljeno za jedno kućanstvo.</string>
 
     <!-- Login -->
     <string name="login_title">Prijava na MAXtv</string>
     <string name="login_subtitle">Prijavi se svojim MAXtv računom.</string>
+    <string name="login_panel_label">NEOVISNI KLIJENT</string>
     <string name="login_stub_note">Povezivanje sa sustavom MAXtv još nije aktivno. Javni kanali rade bez prijave.</string>
+    <string name="login_secure">Lozinka se šifrira prije slanja i nikada ne napušta uređaj u čitljivom obliku.</string>
     <string name="label_username">Korisničko ime</string>
     <string name="label_password">Lozinka</string>
     <string name="hint_username">npr. korisnik@primjer.hr</string>
@@ -49,16 +109,25 @@
     <string name="action_login">Prijavi se</string>
     <string name="login_missing_fields">Upiši korisničko ime i lozinku.</string>
     <string name="login_in_progress">Prijava u tijeku…</string>
-    <string name="login_stub_error">Prijava još nije implementirana. Protokol se povezuje u MinTvApi.</string>
+    <string name="login_stub_error">Prijava nije uspjela. Pokušaj ponovno.</string>
     <string name="login_success">Prijava uspješna.</string>
-    <string name="login_back_hint">Natrag za povratak na kanale</string>
+    <string name="login_back_hint">BACK: natrag na vodič</string>
 
     <!-- Player -->
     <string name="player_title_fallback">Reprodukcija</string>
     <string name="player_live">UŽIVO</string>
+    <string name="player_time_shift">OD POČETKA</string>
     <string name="player_paused">PAUZA</string>
-    <string name="player_loading">UČITAVANJE</string>
-    <string name="player_hint">OK: play/pauza   ◀ ▶: −/+ 10 s   Natrag: izlaz</string>
+    <string name="player_loading">Učitavanje…</string>
+    <string name="player_hint">OK: pauza   ◀ ▶: −/+ 10 s   ▼: kanali   BACK: izlaz</string>
+    <string name="player_hint_strip">OK: gledaj   ◀ ▶: odaberi   BACK: zatvori</string>
+    <string name="player_hint_simple">OK: pauza · ◀▶: −/+ 10 s · ▼: kanali · BACK: zatvori</string>
+    <string name="player_hint_strip_simple">◀ KVALITETA · ▲▼ KANAL · OK ODABERI</string>
+    <string name="player_quality_change">OK · promijeni</string>
+    <string name="player_channels_empty">Nema kanala</string>
+    <string name="player_quality_changed">Kvaliteta: %1$s</string>
+    <string name="player_channels">KANALI</string>
+    <string name="player_channel_count">%1$d od %2$d</string>
     <string name="player_error_title">Reprodukcija nije moguća</string>
     <string name="player_error_generic">Stream se ne može otvoriti. Pokušaj ponovno.</string>
     <string name="player_seek_back">−10 s</string>
@@ -66,18 +135,166 @@
     <string name="player_demo_title">Tears of Steel</string>
     <string name="player_demo_subtitle">Javni DASH test · Unified Streaming</string>
     <string name="player_channel_subtitle">Kanal %1$d · %2$s</string>
-    <string name="vpn_warning">VPN is on — MAXtv blocks playback over VPN. Turn it off to watch.</string>
-    <string name="status_starting">Starting channel…</string>
-    <string name="status_playback_failed">Playback error: %s</string>
-    <string name="error_sign_in_required">Sign in to watch subscription channels.</string>
-    <string name="action_epg">EPG</string>
-    <string name="epg_hint">DPAD: move · OK: watch · BACK: back</string>
-    <string name="epg_loading">Loading EPG…</string>
-    <string name="epg_no_programmes">No programme data for this channel.</string>
-    <string name="error_catchup_unavailable">This programme is not available for catch-up.</string>
-    <string name="error_programme_not_started">This programme has not started yet.</string>
-    <string name="quality_auto">Quality: Auto</string>
-    <string name="quality_max">Quality: Max</string>
-    <string name="quality_saver">Quality: 720p</string>
-    <string name="quality_applies_next">Quality applies to the next channel you open.</string>
+    <string name="player_tune_starting">Povezivanje…</string>
+    <string name="player_tune_live">UŽIVO</string>
+    <string name="player_tune_replay">OD POČETKA</string>
+    <string name="player_play">Reprodukcija</string>
+    <string name="player_pause">Pauza</string>
+    <string name="vpn_warning">VPN je uključen — MAXtv blokira reprodukciju preko VPN-a. Isključi ga za gledanje.</string>
+    <string name="status_starting">Pokretanje kanala…</string>
+    <string name="status_playback_failed">Greška reprodukcije: %s</string>
+    <string name="error_sign_in_required">Prijavi se za gledanje kanala uz pretplatu.</string>
+    <string name="error_no_stream">Ovaj kanal nema DASH adresu.</string>
+    <string name="error_catchup_unavailable">Ova emisija nije dostupna za gledanje od početka.</string>
+    <string name="error_programme_not_started">Ova emisija još nije počela.</string>
+    <string name="quality_auto">Kvaliteta: Auto</string>
+    <string name="quality_max">Kvaliteta: Max</string>
+    <string name="quality_saver">Kvaliteta: 720p</string>
+    <string name="quality_applies_next">Kvaliteta se primjenjuje na sljedeći kanal.</string>
+
+    <!-- Legacy keys still referenced by untouched resources. -->
+    <string name="channels_source">Izvor</string>
+    <string name="channel_description">%1$s, kanal %2$d</string>
+    <string name="channel_footer_hint">Odaberi kanal · OK za reprodukciju</string>
+    <string name="channel_footer_version">v0.1 · neovisni klijent</string>
+    <string name="footer_signed_in">Prijavljen: %1$s</string>
+    <string name="action_sign_in">Prijava</string>
+    <string name="action_refresh">Osvježi</string>
+    <string name="action_demo">Test player</string>
+    <string name="action_retry">Pokušaj ponovno</string>
+    <string name="action_epg">Vodič</string>
+    <string name="status_loading">Učitavanje kanala…</string>
+    <string name="status_refreshing">Osvježavanje…</string>
+    <string name="status_offline_short">Izvan mreže · predmemorija</string>
+    <string name="error_title">Kanali nisu dostupni</string>
+    <string name="error_message">Provjeri vezu s internetom i pokušaj ponovno.</string>
+    <string name="badge_free">FREE</string>
+    <string name="epg_hint">▲ ▼ ◀ ▶: kretanje · OK: gledaj · BACK: natrag</string>
+    <string name="epg_loading">Učitavanje vodiča…</string>
+    <string name="epg_no_programmes">Nema podataka o emisijama za ovaj kanal.</string>
+
+    <!-- Shared shell / actions -->
+    <string name="common_ok">OK</string>
+    <string name="common_back">BACK</string>
+    <string name="common_cancel">Odustani</string>
+    <string name="common_watch">Gledaj</string>
+    <string name="common_close">Zatvori</string>
+    <string name="common_loading">Učitavanje…</string>
+    <string name="common_offline">Izvan mreže</string>
+
+    <!-- Guide inspector -->
+    <string name="guide_status_live">UŽIVO</string>
+    <string name="guide_status_next">SLJEDEĆE</string>
+    <string name="guide_status_past">ZAVRŠENO</string>
+    <string name="guide_catchup_available">Dostupno od početka</string>
+    <string name="guide_catchup_unavailable">Nije dostupno od početka</string>
+    <string name="guide_remaining">Još %1$d min</string>
+    <string name="guide_started">Počelo u %1$s</string>
+    <string name="guide_ends">Završava u %1$s</string>
+    <string name="guide_genre">%1$s</string>
+    <string name="guide_corner_day">DANAS</string>
+    <string name="guide_corner_label">KANAL</string>
+    <string name="guide_inspector_empty">Odaberi emisiju za detalje.</string>
+    <string name="guide_progress_live">U tijeku</string>
+    <string name="guide_watch_channel_action">OK · GLEDAJ KANAL</string>
+    <string name="guide_tuning_after_end">Emisija je završila. Gledaš kanal uživo.</string>
+    <string name="guide_tuning_before_start">Emisija još nije počela. Gledaš kanal uživo.</string>
+
+    <!-- Channels list -->
+    <string name="channels_now">Sada</string>
+    <string name="channels_next">Zatim</string>
+    <string name="channels_no_epg">Bez rasporeda</string>
+    <string name="channels_filter_label">Prikaži</string>
+    <string name="channels_footer">%1$s · %2$s</string>
+    <string name="channels_signed_out">Prijava nije potrebna za besplatne kanale.</string>
+
+    <!-- Settings -->
+    <string name="settings_sign_out_title">Odjava?</string>
+    <string name="settings_sign_out_body">Odjaviti se s MAXtv računa? Kanali uz pretplatu i gledanje od početka neće raditi do ponovne prijave.</string>
+    <string name="settings_sign_out_confirm">Odjavi se</string>
+    <string name="settings_quality_applied">Kvaliteta se primjenjuje na sljedeći kanal.</string>
+    <string name="settings_version_unknown">Nepoznata</string>
+    <string name="settings_account_section">Račun i prijava</string>
+    <string name="settings_playback_section">Slika i zvuk</string>
+    <string name="settings_guide_section">Podaci vodiča</string>
+    <string name="settings_about_section">MINtv</string>
+    <string name="settings_guide_last_update">Spremljeno na uređaju</string>
+    <string name="settings_guide_stored">Na uređaju</string>
+    <string name="settings_guide_status">Status</string>
+    <string name="settings_guide_day">Prikazani dan</string>
+    <string name="settings_about_tagline">Vodič za MAXtv, bez suvišnog.</string>
+    <string name="settings_about_release">Izdanje</string>
+    <string name="settings_about_privacy_label">Privatnost</string>
+    <string name="settings_about_vpn_label">VPN</string>
+    <string name="settings_about_data_label">Podaci i slika</string>
+    <string name="settings_about_independent">Neovisni klijent</string>
+    <string name="settings_about_disclaimer">Nije povezano s Hrvatskim Telekomom.</string>
+    <string name="settings_about_privacy_value">Bez telemetrije</string>
+    <string name="settings_about_vpn_value">Mora biti isključen</string>
+    <string name="settings_about_data_value">MAXtv · Media3 · Widevine</string>
+    <string name="settings_about_built_value">Jedno kućanstvo</string>
+    <string name="settings_about_built_label">Napravljeno za</string>
+    <string name="settings_about_version_label">Verzija</string>
+
+    <!-- Player overlay -->
+    <string name="player_now_label">SADA</string>
+    <string name="player_next_label">ZATIM</string>
+    <string name="player_quality_label">KVALITETA</string>
+    <string name="player_quality_short">KVAL.</string>
+    <string name="player_channels_action">Kanali</string>
+    <string name="player_channels_open">▼: kanali</string>
+    <string name="player_tune_connecting">Povezivanje</string>
+    <string name="player_tune_ready">Spremno</string>
+
+    <!-- Login -->
+    <string name="login_back">Natrag</string>
+    <string name="login_eyebrow">NEOVISNI KLIJENT</string>
+
+    <!-- Rail redesign -->
+    <string name="guide_quality">KVALITETA</string>
+    <string name="guide_jump_now">Na sada</string>
+    <string name="guide_refresh">Osvježi</string>
+    <string name="guide_ended">PRETHODNO</string>
+    <string name="guide_soon">USKORO</string>
+    <string name="guide_catchup_action">OK · GLEDAJ OD POČETKA</string>
+    <string name="guide_live_action">OK · GLEDAJ UŽIVO</string>
+    <string name="guide_starts_at">POČINJE U %1$s</string>
+    <string name="guide_unavailable">NIJE DOSTUPNO OD POČETKA</string>
+    <string name="guide_no_description">Nema opisa.</string>
+    <string name="guide_channel_meta_quality">KANAL %1$d · %2$s</string>
+    <string name="guide_loading_hint">Dohvaćam raspored za danas</string>
+    <string name="quality_short_auto">AUTO</string>
+    <string name="quality_short_max">MAX</string>
+    <string name="quality_short_saver">720P</string>
+    <string name="channels_refresh">Osvježi</string>
+    <string name="settings_signed_out_note">Prijavi se za kanale uz pretplatu i gledanje od početka.</string>
+    <string name="settings_about_legal">Neovisni klijent. Nije povezan s Hrvatskim Telekomom.</string>
+    <string name="settings_about_privacy_body">Bez analitike, oglasa i telemetrije. Lozinka se sprema samo ako to odabereš, šifrirana Android Keystoreom.</string>
+    <string name="settings_about_streams">MAXtv kanali i EPG · Media3 · Widevine</string>
+    <string name="settings_cache">Predmemorija</string>
+    <string name="settings_cache_channels">Osvježi popis kanala</string>
+    <string name="settings_cache_guide">Osvježi vodič</string>
+    <string name="settings_cache_note">Podaci se spremaju na uređaj kako bi se aplikacija otvorila bez čekanja.</string>
+    <string name="settings_account_sign_in_body">Koristi svoj MAXtv račun. Javni kanali rade i bez prijave.</string>
+    <string name="settings_account_sign_out_note">Sesija se briše na ovom uređaju.</string>
+    <string name="settings_playback_quality">Kvaliteta slike</string>
+    <string name="settings_playback_note">Zadana kvaliteta reprodukcije.</string>
+    <string name="settings_version">Verzija</string>
+    <string name="settings_build">Za jedno kućanstvo</string>
+    <string name="login_panel_title">Gledaj svoj MAXtv.</string>
+    <string name="login_panel_body">Vodič, kanali i reprodukcija na jednom mjestu. Bez oglasa i bez telemetrije.</string>
+
+    <!-- Rail redesign settings -->
+    <string name="settings_open_guide">Otvori vodič</string>
+    <string name="settings_forget_password">Zaboravi spremljenu lozinku</string>
+    <string name="settings_password_forgotten">Spremljena lozinka je uklonjena.</string>
+    <string name="settings_signed_out_toast">Odjavljeni ste.</string>
+    <string name="settings_refresh_started">Osvježavanje…</string>
+    <string name="settings_refresh_done">Popis kanala je osvježen.</string>
+    <string name="settings_refresh_failed">Osvježavanje nije uspjelo.</string>
+    <string name="settings_account_actions">Radnje računa</string>
+    <string name="settings_playback_current">Trenutno</string>
+    <string name="settings_guide_current_day">Danas</string>
+    <string name="settings_about_app">O aplikaciji</string>
+    <string name="login_skip">Nastavi bez prijave</string>
 </resources>
