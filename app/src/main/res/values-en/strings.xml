@@ -5,7 +5,9 @@
     <string name="brand_accent">tv</string>
 
     <string name="nav_guide">Guide</string>
+    <string name="nav_home">Home</string>
     <string name="nav_channels">Channels</string>
+    <string name="nav_search">Search</string>
     <string name="nav_settings">Settings</string>
     <string name="shell_clock_content_description">Current time %1$s</string>
     <string name="shell_status_offline">Offline</string>
@@ -32,6 +34,9 @@
     <string name="guide_hint">OK: watch   ◀ ▶: time   ▲ ▼: channel</string>
     <string name="guide_time_range">%1$s – %2$s</string>
     <string name="guide_duration_min">%1$d min</string>
+    <string name="duration_minutes">%1$d min</string>
+    <string name="duration_hours">%1$d h</string>
+    <string name="duration_hours_minutes">%1$d h %2$d min</string>
     <string name="guide_channel_meta">Channel %1$d · %2$s</string>
     <string name="guide_now_bubble">%1$s</string>
     <string name="guide_selected_channel">Channel %1$d</string>
@@ -60,6 +65,16 @@
     <string name="settings_playback_hint">Picture quality</string>
     <string name="settings_guide_hint">Schedule and cache</string>
     <string name="settings_about_hint">Version and privacy</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_hint">Interface language</string>
+    <string name="settings_language_section">Interface language</string>
+    <string name="settings_language_body">Choose the language for the whole app. MAXtv catalogue content stays in Croatian.</string>
+    <string name="settings_language_option">App language</string>
+    <string name="settings_language_note">MAXtv catalogue content, titles and descriptions remain in Croatian.</string>
+    <string name="language_croatian">Hrvatski</string>
+    <string name="language_english">English</string>
+    <string name="language_croatian_body">The whole interface in Croatian.</string>
+    <string name="language_english_body">The whole interface in English.</string>
     <string name="settings_account_signed_in">Signed in</string>
     <string name="settings_account_signed_out">Not signed in</string>
     <string name="settings_account_body">Signing in is required for subscription channels and for watching from the start. Free channels work without signing in.</string>
@@ -210,7 +225,7 @@
     <string name="settings_guide_stored">On device</string>
     <string name="settings_guide_status">Status</string>
     <string name="settings_guide_day">Displayed day</string>
-    <string name="settings_about_tagline">A MAXtv guide without the extra.</string>
+    <string name="settings_about_tagline">A MAXtv guide without the clutter.</string>
     <string name="settings_about_release">Release</string>
     <string name="settings_about_privacy_label">Privacy</string>
     <string name="settings_about_vpn_label">VPN</string>
@@ -245,6 +260,8 @@
     <string name="guide_catchup_action">OK · WATCH FROM START</string>
     <string name="guide_live_action">OK · WATCH LIVE</string>
     <string name="guide_starts_at">STARTS AT %1$s</string>
+    <string name="guide_remaining_inline">%1$s left</string>
+    <string name="guide_starts_at_inline">starts at %1$s</string>
     <string name="guide_unavailable">NOT AVAILABLE FROM START</string>
     <string name="guide_no_description">No description.</string>
     <string name="guide_channel_meta_quality">CHANNEL %1$d · %2$s</string>
@@ -261,7 +278,7 @@
     <string name="settings_cache_channels">Refresh channel list</string>
     <string name="settings_cache_guide">Refresh guide</string>
     <string name="settings_cache_note">Data is stored on the device so the app opens without waiting.</string>
-    <string name="settings_account_sign_in_body">Use your MAXtv account. Free channels work without signing in.</string>
+    <string name="settings_account_sign_in_body">Use your MAXtv account. Public channels work without signing in.</string>
     <string name="settings_account_sign_out_note">The session is removed from this device.</string>
     <string name="settings_playback_quality">Picture quality</string>
     <string name="settings_playback_note">Default playback quality.</string>
@@ -283,4 +300,138 @@
     <string name="settings_guide_current_day">Today</string>
     <string name="settings_about_app">About</string>
     <string name="login_skip">Continue without signing in</string>
+
+    <!-- Home rails -->
+    <string name="home_title">Home</string>
+    <string name="home_subtitle">Recommendations, continue watching and your list</string>
+    <string name="home_show_more">SHOW MORE</string>
+    <string name="home_empty">Nothing to show.</string>
+    <string name="home_error">Recommendations are unavailable</string>
+
+    <!-- Watchlist -->
+    <string name="watchlist_title">My list</string>
+    <string name="watchlist_subtitle">Saved to watch later</string>
+    <string name="watchlist_manage">Manage</string>
+    <string name="watchlist_done">Done</string>
+    <string name="watchlist_select_all">Select all</string>
+    <string name="watchlist_delete_selected">Delete selected</string>
+    <string name="watchlist_delete_count">Delete selected (%1$d)</string>
+    <string name="watchlist_delete_title">Remove from list?</string>
+    <string name="watchlist_delete_body">Remove %1$d selected items from the watchlist?</string>
+    <string name="watchlist_delete_confirm">Delete</string>
+    <string name="watchlist_empty">There is nothing on the watchlist</string>
+    <string name="watchlist_empty_body">Add a film or series from its details.</string>
+    <string name="watchlist_sign_in">Sign in to use the watchlist.</string>
+    <string name="watchlist_error">The watchlist could not be loaded.</string>
+    <string name="watchlist_count">%1$d saved</string>
+
+    <!-- Continue watching -->
+    <string name="cw_title">Continue watching</string>
+    <string name="cw_subtitle">Everything you started, in one place</string>
+    <string name="cw_empty">Nothing to continue right now</string>
+    <string name="cw_empty_body">You have not added anything to Continue watching yet. Partly watched content will appear here.</string>
+    <string name="cw_sign_in">Sign in to continue watching.</string>
+    <string name="cw_error">Continue watching is unavailable.</string>
+    <string name="cw_delete_title">Remove from Continue watching?</string>
+    <string name="cw_delete_body">Remove %1$d selected items from Continue watching?</string>
+    <string name="cw_remaining">%1$d min left</string>
+
+    <!-- Search -->
+    <string name="search_title">Search</string>
+    <string name="search_subtitle">Films, series, people and channels</string>
+    <string name="search_hint">Search</string>
+    <string name="search_clear">Clear</string>
+    <string name="search_sign_in">Sign in to search MAXtv content.</string>
+    <string name="search_min_length">Type at least %1$d characters.</string>
+    <string name="search_no_results">No results for “%1$s”.</string>
+    <string name="search_no_history">No recent searches</string>
+    <string name="search_history_hint">Try a film title, a genre or an actor.</string>
+    <string name="search_history">Recent searches</string>
+    <string name="search_history_clear_row">Clear history</string>
+    <string name="search_clear_history">Clear recent searches</string>
+    <string name="search_tab_all">All</string>
+    <string name="search_tab_movies">Films</string>
+    <string name="search_tab_shows">Series</string>
+    <string name="search_tab_people">People</string>
+    <string name="search_tab_channels">Channels</string>
+    <string name="search_tab_streaming">Disney+</string>
+    <string name="search_movies">Films</string>
+    <string name="search_shows">Series</string>
+    <string name="search_people">People</string>
+    <string name="search_streaming">Available on Disney+</string>
+    <string name="search_channels_header">Channels</string>
+
+    <!-- Person -->
+    <string name="person_title">Person</string>
+    <string name="person_subtitle">Cast and crew</string>
+    <string name="person_empty">No content for this person.</string>
+    <string name="person_error">Person unavailable.</string>
+
+    <!-- Details -->
+    <string name="details_title">Details</string>
+    <string name="details_subtitle">Synopsis, cast and related content</string>
+    <string name="details_error_title">Details are unavailable</string>
+    <string name="details_error_body">Check your connection and try again.</string>
+    <string name="details_kind_program">FILM</string>
+    <string name="details_kind_series">SERIES</string>
+    <string name="details_watch">WATCH</string>
+    <string name="details_resume">CONTINUE WATCHING</string>
+    <string name="details_watchlist_add">Add to list</string>
+    <string name="details_watchlist_remove">Remove from list</string>
+    <string name="details_watchlist_added">Added to the watchlist.</string>
+    <string name="details_watchlist_removed">Removed from the watchlist.</string>
+    <string name="details_trailer">Trailer</string>
+    <string name="details_geo_blocked">This content is not available in your country.</string>
+    <string name="details_device_blocked">This content is not available on this device.</string>
+    <string name="details_runtime">Runtime</string>
+    <string name="details_seasons">Seasons</string>
+    <string name="details_episodes">Episodes</string>
+    <string name="details_episodes_sign_in">Sign in to see the episodes.</string>
+    <string name="details_episodes_empty">No episodes in this season.</string>
+    <string name="details_play_episode">WATCH</string>
+    <string name="details_restricted">Restricted</string>
+    <string name="details_cast">Cast and crew</string>
+    <string name="details_related">Related content</string>
+    <string name="details_not_signed_in">Sign in to watch this content.</string>
+    <string name="details_unavailable">This content is not available right now.</string>
+    <string name="subpage_subtitle">Everything in the selected collection</string>
+
+    <!-- Channel favourites -->
+    <string name="channel_favourite_accessibility">Favourite channel</string>
+    <string name="channels_filter_favourites">Favourites</string>
+    <string name="channels_options">Options</string>
+    <string name="channels_options_done">Finish</string>
+    <string name="channels_options_reorder">Edit channel order</string>
+    <string name="channels_options_reset_favourites">Clear favourite channels</string>
+    <string name="channels_options_reset_order">Restore factory order</string>
+    <string name="channels_reorder_hint">▲ ▼: move channel   OK: save   BACK: cancel</string>
+    <string name="channels_reorder_saving">Saving order…</string>
+    <string name="channels_reorder_saved">Channel order saved.</string>
+    <string name="channels_reorder_failed">The order was not saved. Try again.</string>
+    <string name="channels_favourites_sign_in">Sign in to use favourite channels.</string>
+    <string name="channels_favourites_loading">Loading favourites…</string>
+    <string name="channels_favourite_not_allowed">Marking favourite is not allowed for this channel.</string>
+    <string name="channels_favourite_added">Channel added to favourites.</string>
+    <string name="channels_favourite_removed">Channel removed from favourites.</string>
+    <string name="channels_empty_favourites">No favourite channels.</string>
+    <string name="channels_reset_favourites_title">Clear favourites?</string>
+    <string name="channels_reset_favourites_body">Do you want to clear the favourite channel list?</string>
+    <string name="channels_reset_order_title">Restore factory order?</string>
+    <string name="channels_reset_order_body">Do you want to reset the channel list?</string>
+    <string name="channels_favourites_cleared">Favourite list cleared.</string>
+    <string name="channels_order_reset">Channel order restored.</string>
+
+    <!-- Model labels shared by cards, details and search -->
+    <string name="meta_minutes">%1$d min</string>
+    <plurals name="meta_seasons_short">
+        <item quantity="one">%1$d season</item>
+        <item quantity="other">%1$d seasons</item>
+    </plurals>
+    <string name="season_label">Season %1$d</string>
+    <string name="channel_number_fallback">Channel %1$d</string>
+    <string name="channel_fallback">Channel</string>
+    <string name="guide_untitled">Untitled</string>
+    <string name="badge_on_demand">ON DEMAND</string>
+    <string name="badge_catchup">CATCH-UP</string>
+    <string name="badge_recording">RECORDING</string>
 </resources>

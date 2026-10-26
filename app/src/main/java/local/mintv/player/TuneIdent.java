@@ -138,7 +138,7 @@ public final class TuneIdent extends FrameLayout {
     public void showChannel(Channel channel, String programmeTitle, boolean live) {
         if (channel != null) {
             ghostNumber.setText(String.format(Locale.US, "%02d", channel.getNumber()));
-            channelName.setText(channel.getTitle());
+            channelName.setText(channel.getTitle(getContext()));
         } else {
             ghostNumber.setText("");
             channelName.setText(R.string.player_demo_title);

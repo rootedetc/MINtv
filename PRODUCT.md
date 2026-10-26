@@ -37,8 +37,9 @@ A private, telemetry-free MAXtv client whose EPG is the front door rather than a
 - EPG grid: one day, programme blocks, now line, live progress, catch-up metadata.
 - Live playback via Media3 DASH + Widevine; catch-up/time-shift from an EPG programme.
 - Channel zapping with CH+/CH− and D-pad from the picture; quick channel switching in the player.
-- Quality preference: Auto / Max / 720p, applied to the next channel.
-- No search, reminders, recording, favourites, multi-day EPG, or programme notifications exist. These must not be invented as working features.
+- Quality preference: Auto / Max / 720p, applied immediately without re-tuning; the player readout reports the actual produced resolution (e.g. 1080p or 720p).
+- Player settings: quality, subtitle and audio-language selection live in the bottom overlay; the channel switcher carries no quality control.
+- Home rails, Watchlist, Continue Watching, favourite channels/custom order, Search and content details are implemented from the six feature specs. Rentals, recordings, parental PIN, multi-day EPG and programme notifications remain out of scope.
 - No phone layout ships. The app is landscape TV only.
 
 ## Brand Commitments

@@ -29,6 +29,9 @@ public final class ImageLoader {
     private static final int CACHE_BYTES = 12 * 1024 * 1024;
     private static final int TARGET_WIDTH_PX = 400;
     private static final int TARGET_HEIGHT_PX = 240;
+    private static final int HERO_WIDTH_PX = 1280;
+    private static final int HERO_HEIGHT_PX = 720;
+    private static final String HERO_KEY_PREFIX = "hero:1280x720:";
     private static final int MAX_DOWNLOAD_BYTES = 4 * 1024 * 1024;
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -51,13 +54,32 @@ public final class ImageLoader {
     }
 
     public static void load(ImageView view, String url) {
+        load(view, url, TARGET_WIDTH_PX, TARGET_HEIGHT_PX, false);
+    }
+
+    /**
+     * Home hero artwork: a 16:9 landscape frame decoded toward 1280x720. Unlike the logo
+     * loader this never paints {@code ic_channel_placeholder} — an unresolved hero keeps
+     * its designed plate behind the image instead of a grey icon.
+     */
+    public static void loadHero(ImageView view, String url) {
+        load(view, url, HERO_WIDTH_PX, HERO_HEIGHT_PX, true);
+    }
+
+    private static void load(ImageView view, String url, int targetWidth, int targetHeight,
+                             boolean hero) {
         if (view == null) {
             return;
         }
-        String key = url == null ? "" : url.trim();
+        String remote = url == null ? "" : url.trim();
+        String key = remote.isEmpty() ? "" : (hero ? HERO_KEY_PREFIX + remote : remote);
         view.setTag(key);
         if (key.isEmpty()) {
-            view.setImageResource(R.drawable.ic_channel_placeholder);
+            if (hero) {
+                view.setImageDrawable(null);
+            } else {
+                view.setImageResource(R.drawable.ic_channel_placeholder);
+            }
             return;
         }
 
@@ -67,9 +89,14 @@ public final class ImageLoader {
             return;
         }
 
-        view.setImageResource(R.drawable.ic_channel_placeholder);
+        if (hero) {
+            // The hero plate stays visible until real artwork arrives; no broken-image state.
+            view.setImageDrawable(null);
+        } else {
+            view.setImageResource(R.drawable.ic_channel_placeholder);
+        }
         POOL.execute(() -> {
-            Bitmap bitmap = download(key);
+            Bitmap bitmap = download(remote, targetWidth, targetHeight);
             if (bitmap == null) {
                 return;
             }
@@ -82,7 +109,7 @@ public final class ImageLoader {
         });
     }
 
-    private static Bitmap download(String url) {
+    private static Bitmap download(String url, int targetWidth, int targetHeight) {
         Request request = new Request.Builder()
                 .url(url)
                 .header("Accept", "image/*")
@@ -96,13 +123,13 @@ public final class ImageLoader {
                 return null;
             }
             byte[] bytes = body.bytes();
-            return decode(bytes);
+            return decode(bytes, targetWidth, targetHeight);
         } catch (IOException | RuntimeException e) {
             return null;
         }
     }
 
-    private static Bitmap decode(byte[] bytes) {
+    private static Bitmap decode(byte[] bytes, int targetWidth, int targetHeight) {
         BitmapFactory.Options bounds = new BitmapFactory.Options();
         bounds.inJustDecodeBounds = true;
         BitmapFactory.decodeByteArray(bytes, 0, bytes.length, bounds);
@@ -111,8 +138,8 @@ public final class ImageLoader {
         }
 
         int sample = 1;
-        while (bounds.outWidth / (sample * 2) >= TARGET_WIDTH_PX
-                || bounds.outHeight / (sample * 2) >= TARGET_HEIGHT_PX) {
+        while (bounds.outWidth / (sample * 2) >= targetWidth
+                || bounds.outHeight / (sample * 2) >= targetHeight) {
             sample *= 2;
         }
 

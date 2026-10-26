@@ -1,5 +1,7 @@
 package local.mintv.epg;
 
+import android.content.Context;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -9,6 +11,8 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
+
+import local.mintv.R;
 
 /**
  * One EPG entry. Times are stored as epoch millis (UTC on the wire, displayed local).
@@ -39,6 +43,8 @@ public final class EpgProgram {
 
     public final String id;
     public final String title;
+    /** True when the listing carried no name and {@link #title} holds the Croatian fallback. */
+    public final boolean titleMissing;
     public final String description;
     public final String genre;
     public final String showType;
@@ -59,12 +65,13 @@ public final class EpgProgram {
     /** {@code entitlements.hasTimeshift}; false when the object is absent. */
     public final boolean hasTimeshift;
 
-    private EpgProgram(String id, String title, String description, String genre,
-                       String showType, long startMs, long endMs, boolean catchup,
+    private EpgProgram(String id, String title, boolean titleMissing, String description,
+                       String genre, String showType, long startMs, long endMs, boolean catchup,
                        boolean adult, String listingGuid, String catchupId, String catchupKey,
                        String mediaId, boolean hasStartOver, boolean hasTimeshift) {
         this.id = id;
         this.title = title;
+        this.titleMissing = titleMissing;
         this.description = description;
         this.genre = genre;
         this.showType = showType;
@@ -82,6 +89,11 @@ public final class EpgProgram {
 
     public long durationMs() {
         return Math.max(0, endMs - startMs);
+    }
+
+    /** Localized listing name; falls back to “Untitled” instead of the Croatian sentinel. */
+    public String displayTitle(Context context) {
+        return titleMissing ? context.getString(R.string.guide_untitled) : title;
     }
 
     /** 0..1 progress, clamped. Returns 0 outside the programme. */
@@ -125,7 +137,8 @@ public final class EpgProgram {
         if (title.isEmpty()) {
             title = fullDescription;
         }
-        if (title.isEmpty()) {
+        boolean titleMissing = title.isEmpty();
+        if (titleMissing) {
             title = "Bez naziva";
         }
 
@@ -154,6 +167,7 @@ public final class EpgProgram {
         return new EpgProgram(
                 clean(json.optString("program_id", "")),
                 title,
+                titleMissing,
                 synopsis,
                 genre,
                 clean(json.optString("show_type", "")),

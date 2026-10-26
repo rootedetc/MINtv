@@ -1,29 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/login_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg">
 
     <ScrollView
+        android:id="@+id/login_scroll"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
         android:fillViewport="true"
+        android:overScrollMode="never"
         android:scrollbars="none">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
+            android:gravity="center"
             android:orientation="vertical"
             android:paddingStart="24dp"
             android:paddingTop="24dp"
             android:paddingEnd="24dp"
             android:paddingBottom="24dp">
 
+            <!--
+                Responsive panel: 76dp side margins on top of the 24dp page padding give
+                the 760dp sheet at 960dp and shrink it on narrower displays, so the right
+                edge (and its 1dp hairline) can never fall outside the screen.
+            -->
             <LinearLayout
-                android:layout_width="760dp"
+                android:id="@+id/login_panel"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="76dp"
+                android:layout_marginEnd="76dp"
                 android:background="@drawable/bg_login_panel"
                 android:orientation="vertical">
 
@@ -37,9 +48,14 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal">
 
+                    <!-- 1dp inset so the panel's own hairline stays visible on the left
+                         and under the rail instead of being painted over by its fill. -->
                     <LinearLayout
+                        android:id="@+id/login_brand_column"
                         android:layout_width="96dp"
                         android:layout_height="match_parent"
+                        android:layout_marginStart="1dp"
+                        android:layout_marginBottom="1dp"
                         android:background="@color/bg"
                         android:gravity="center_horizontal"
                         android:orientation="vertical"
@@ -80,11 +96,13 @@
                     </LinearLayout>
 
                     <View
+                        android:id="@+id/login_brand_divider"
                         android:layout_width="1dp"
                         android:layout_height="match_parent"
                         android:background="@color/stroke" />
 
                     <LinearLayout
+                        android:id="@+id/login_form"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
@@ -95,6 +113,7 @@
                         android:paddingBottom="22dp">
 
                         <TextView
+                            android:id="@+id/login_title"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:fontFamily="@font/barlow_condensed_semibold"
@@ -104,6 +123,7 @@
                             android:textSize="32sp" />
 
                         <TextView
+                            android:id="@+id/login_subtitle"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
@@ -113,6 +133,7 @@
                             android:textSize="14sp" />
 
                         <TextView
+                            android:id="@+id/login_username_label"
                             style="@style/Text.MinTv.Label"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
@@ -133,6 +154,7 @@
                             android:nextFocusForward="@+id/input_password" />
 
                         <TextView
+                            android:id="@+id/login_password_label"
                             style="@style/Text.MinTv.Label"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
@@ -165,6 +187,7 @@
                             android:trackTint="@color/stroke_strong" />
 
                         <LinearLayout
+                            android:id="@+id/login_actions"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
@@ -214,12 +237,15 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
+                            android:ellipsize="end"
                             android:fontFamily="sans-serif"
                             android:lineSpacingExtra="2dp"
+                            android:maxLines="2"
                             android:textColor="@color/text_tertiary"
                             android:textSize="12sp" />
 
                         <TextView
+                            android:id="@+id/login_secure"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="12dp"

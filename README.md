@@ -11,16 +11,33 @@ channels, the EPG and the player.
 
 - **Sign in** with your MAXtv username and password (the native IDM login, password encrypted
   with RSA-OAEP before it leaves the device).
+- **Hrvatski / English UI** — choose the app language in Settings; MAXtv catalogue text stays as
+  the service returns it.
+- **Home rails** — the server-driven MAXtv home page: hero highlights, editorial rails, continue
+  watching, your list, favourite channels and on-now, with "show more" grids.
+- **Search** — films, series, people and channels, with local recent-search history and the same
+  detail cards as the rest of the app.
+- **Watchlist / Continue Watching** — add from details, resume a catch-up item, and remove with
+  TV-style multi-select.
+- **Favourite channels and custom order** — favourite from the channel grid, filter to favourites,
+  reorder channels, and reset either list.
+- **Content details** — programme and series metadata, actions, seasons/episodes, cast and related
+  content.
 - **EPG** — a TiviMate-style grid: 247 channels, a full day of programmes, day ruler, now
   line, progress on the current show, and channel logos.
 - **Live TV** — DASH playback with Widevine for subscription channels, clear DASH for the
   free-to-air ones.
-- **Channel zapping** — `CH+`/`CH-` or `UP`/`DOWN` straight from the picture, with a quick
-  switch strip when the overlay is open.
+- **Channel zapping** — `CH+`/`CH-` or `UP`/`DOWN` straight from the picture, with a compact
+  channel switcher when the overlay is open.
 - **Catch-up / time shift** — pick a programme that already aired in the EPG and it plays
   from the beginning.
+- **Resume and progress** — VOD/catch-up progress is written to the account every five seconds,
+  flushed on pause/stop, and resumed from the last position.
 - **Quality control** — `Auto` (fast start, then highest), `Max` (1080p from the first frame,
-  no switching) or `720p` (data saver).
+  no switching) or `720p` (data saver), applied immediately. The player always shows the
+  **actual** resolution being produced (e.g. `1080p` or `720p`), not the preference.
+- **Player settings** — change quality, subtitles and audio language from the overlay; the
+  channel switcher stays a clean channel list.
 - **Fast start** — first frame in about a second on a healthy link, plus a watchdog that
   re-resolves the CDN token when it lands on a slow edge.
 

@@ -108,6 +108,20 @@ public final class EpgRepository {
             PAGE_THREADS, runnable -> daemon(runnable, "epg-page"));
     private final AtomicBoolean loading = new AtomicBoolean(false);
     private final AtomicInteger generation = new AtomicInteger(0);
+    private final java.util.concurrent.atomic.AtomicReference<PendingLoad> pendingLoad =
+            new java.util.concurrent.atomic.AtomicReference<>();
+
+    private static final class PendingLoad {
+        final String date;
+        final Callback onLoaded;
+        final ErrorCallback onError;
+
+        PendingLoad(String date, Callback onLoaded, ErrorCallback onError) {
+            this.date = date;
+            this.onLoaded = onLoaded;
+            this.onError = onError;
+        }
+    }
 
     private volatile List<EpgChannel> channels = Collections.emptyList();
     private volatile String currentDate;
@@ -131,7 +145,8 @@ public final class EpgRepository {
             return;
         }
         if (!loading.compareAndSet(false, true)) {
-            Log.i(TAG, "loadDay(" + date + ") ignored: a load is already running");
+            pendingLoad.set(new PendingLoad(date, onLoaded, onError));
+            Log.i(TAG, "loadDay(" + date + ") queued: a load is already running");
             return;
         }
         final int gen = generation.incrementAndGet();
@@ -225,6 +240,11 @@ public final class EpgRepository {
             postError(gen, onError, MSG_UNEXPECTED);
         } finally {
             loading.set(false);
+            PendingLoad next = pendingLoad.getAndSet(null);
+            if (next != null) {
+                Log.i(TAG, "Starting queued EPG load for " + next.date);
+                loadDay(next.date, next.onLoaded, next.onError);
+            }
         }
     }
 

@@ -1,6 +1,5 @@
 package local.mintv;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -23,13 +22,19 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
+import local.mintv.data.AccountChannelRepository;
 import local.mintv.data.Channel;
 import local.mintv.data.ChannelRepository;
 import local.mintv.data.Session;
 import local.mintv.epg.EpgCache;
 import local.mintv.net.ApiException;
+import local.mintv.net.Background;
 import local.mintv.net.PlaybackApi;
 import local.mintv.player.ChannelQueue;
 import local.mintv.ui.ChannelAdapter;
@@ -38,28 +43,50 @@ import local.mintv.ui.Tv;
 import local.mintv.ui.TvRail;
 
 /** Every channel in the line-up, with what is on now and a truthful live progress line. */
-public final class ChannelListActivity extends Activity implements ChannelRepository.Listener {
+public final class ChannelListActivity extends BaseActivity implements ChannelRepository.Listener {
+
+    public static android.content.Intent intentFavourites(android.content.Context context) {
+        android.content.Intent intent = new android.content.Intent(context,
+                ChannelListActivity.class);
+        intent.putExtra(EXTRA_FAVOURITES, true);
+        return intent;
+    }
 
     private static final String TAG = "ChannelList";
+    private static final String EXTRA_FAVOURITES = "local.mintv.extra.FAVOURITES";
 
     private TvRail rail;
     private RecyclerView grid;
     private ChannelAdapter adapter;
     private TextView status;
+    private View footer;
     private TextView footerInfo;
     private TextView filterAll;
     private TextView filterFree;
     private TextView filterHd;
+    private TextView filterFavourites;
+    private TextView optionsAction;
     private View emptyState;
     private TextView emptyText;
     private ProgressBar progress;
     private ChannelRepository repository;
+    private AccountChannelRepository accountRepository;
     private PlaybackApi playbackApi;
 
     private final List<Channel> allChannels = new ArrayList<>();
-    private int filter; // 0 all, 1 free, 2 HD
+    private final Set<Integer> favourites = new HashSet<>();
+    private final List<Integer> serverOrder = new ArrayList<>();
+    private boolean favouritesKnown;
+    private boolean orderApplied;
+    private boolean accountLoaded;
+    private boolean accountLoading;
+    private boolean reorderMode;
+    private List<Channel> reorderSnapshot;
+    private int reorderPosition = -1;
+    private int filter; // 0 all, 1 free, 2 HD, 3 favourites
     private boolean firstDataDelivered;
     private boolean fromCache;
+    private boolean openFavourites;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable nowTick = new Runnable() {
@@ -78,7 +105,16 @@ public final class ChannelListActivity extends Activity implements ChannelReposi
         setContentView(buildUi());
 
         repository = ChannelRepository.get(this);
+        accountRepository = new AccountChannelRepository(this);
         playbackApi = new PlaybackApi(this);
+        openFavourites = getIntent() != null
+                && getIntent().getBooleanExtra(EXTRA_FAVOURITES, false);
+        if (openFavourites) {
+            filter = 3;
+        }
+        if (Session.get(this).isLoggedIn()) {
+            loadAccountChannels();
+        }
         load(false);
         grid.requestFocus();
     }
@@ -88,6 +124,20 @@ public final class ChannelListActivity extends Activity implements ChannelReposi
         super.onResume();
         warnIfVpn();
         updateAccount();
+        if (Session.get(this).isLoggedIn()) {
+            if (!accountLoaded) {
+                loadAccountChannels();
+            }
+        } else if (accountLoaded || favouritesKnown) {
+            accountLoaded = false;
+            favouritesKnown = false;
+            favourites.clear();
+            serverOrder.clear();
+            orderApplied = false;
+            if (filter == 3) {
+                applyFilter(false);
+            }
+        }
         handler.removeCallbacks(nowTick);
         handler.post(nowTick);
     }
@@ -151,16 +201,28 @@ public final class ChannelListActivity extends Activity implements ChannelReposi
         grid.setItemAnimator(null);
         grid.setClipToPadding(false);
         grid.setPadding(Tv.dp(this, 32), Tv.dp(this, 16),
-                Tv.dp(this, 32), Tv.dp(this, 20));
+                Tv.dp(this, 32), Tv.dp(this, 64));
         grid.setVerticalScrollBarEnabled(false);
         grid.setNextFocusUpId(filterAll.getId());
         grid.setNextFocusLeftId(rail.item(TvRail.Tab.CHANNELS).getId());
-        adapter = new ChannelAdapter(this::openChannel);
+        adapter = new ChannelAdapter(this::openChannel, this::toggleFavourite);
         adapter.setSpanCount(spanCount);
         adapter.setRailFocusId(rail.item(TvRail.Tab.CHANNELS).getId());
         grid.setAdapter(adapter);
         body.addView(grid, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // Scrim over the foot of the grid: the third row peeks and fades instead of
+        // being hard-clipped. Purely decorative and never focusable or clickable.
+        View fade = new View(this);
+        fade.setBackgroundResource(R.drawable.bg_grid_fade);
+        fade.setFocusable(false);
+        fade.setClickable(false);
+        fade.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        body.addView(fade, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                getResources().getDimensionPixelSize(R.dimen.channel_fade_height),
+                Gravity.BOTTOM));
 
         progress = new ProgressBar(this);
         progress.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(Tv.BRAND));
@@ -202,6 +264,7 @@ public final class ChannelListActivity extends Activity implements ChannelReposi
         filterAll = chip(getString(R.string.channels_filter_all), 0);
         filterFree = chip(getString(R.string.channels_filter_free), 1);
         filterHd = chip(getString(R.string.channels_filter_hd), 2);
+        filterFavourites = chip(getString(R.string.channels_filter_favourites), 3);
         updateChips();
         LinearLayout chips = new LinearLayout(this);
         chips.setOrientation(LinearLayout.HORIZONTAL);
@@ -209,13 +272,35 @@ public final class ChannelListActivity extends Activity implements ChannelReposi
         chips.addView(filterAll, chipLp(0));
         chips.addView(filterFree, chipLp(8));
         chips.addView(filterHd, chipLp(8));
+        chips.addView(filterFavourites, chipLp(8));
         header.addView(chips);
 
-        TextView refresh = Tv.ghost(this, getString(R.string.channels_refresh));
-        LinearLayout.LayoutParams refreshLp = new LinearLayout.LayoutParams(
+        optionsAction = Tv.ghost(this, getString(R.string.channels_options));
+        optionsAction.setOnClickListener(view -> {
+            if (reorderMode) {
+                saveReorder();
+            } else {
+                showOptions();
+            }
+        });
+        LinearLayout.LayoutParams optionsLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, Tv.dp(this, 44));
-        refreshLp.leftMargin = Tv.dp(this, 12);
+        optionsLp.leftMargin = Tv.dp(this, 10);
+        header.addView(optionsAction, optionsLp);
+
+        FrameLayout refresh = new FrameLayout(this);
+        refresh.setBackgroundResource(R.drawable.bg_button_ghost);
+        refresh.setFocusable(true);
+        refresh.setClickable(true);
+        refresh.setContentDescription(getString(R.string.channels_refresh));
         refresh.setOnClickListener(view -> load(true));
+        Tv.focusScale(refresh);
+        refresh.addView(Tv.icon(this, R.drawable.ic_refresh, Tv.TEXT_2, 21f),
+                new FrameLayout.LayoutParams(
+                        Tv.dp(this, 21), Tv.dp(this, 21), Gravity.CENTER));
+        LinearLayout.LayoutParams refreshLp = new LinearLayout.LayoutParams(
+                Tv.dp(this, 44), Tv.dp(this, 44));
+        refreshLp.leftMargin = Tv.dp(this, 8);
         header.addView(refresh, refreshLp);
         return header;
     }
@@ -273,15 +358,27 @@ public final class ChannelListActivity extends Activity implements ChannelReposi
     }
 
     private View buildFooter() {
-        LinearLayout footer = new LinearLayout(this);
-        footer.setOrientation(LinearLayout.HORIZONTAL);
-        footer.setGravity(Gravity.CENTER_VERTICAL);
-        Tv.pad(footer, 32, 0, 32, 0);
-        TextView hint = Tv.text(this, 12f, Tv.TEXT_3, false);
-        hint.setText(R.string.channels_hint);
-        footer.addView(hint, new LinearLayout.LayoutParams(0,
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        Tv.pad(bar, 32, 0, 32, 0);
+        footerInfo = Tv.text(this, 12f, Tv.TEXT_3, false);
+        bar.addView(footerInfo, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        return footer;
+        // Normal mode has no permanent key hint; the line only exists for reorder.
+        bar.setVisibility(View.GONE);
+        footer = bar;
+        return bar;
+    }
+
+    private void showFooter(int textRes) {
+        footerInfo.setText(textRes);
+        footer.setVisibility(View.VISIBLE);
+    }
+
+    private void hideFooter() {
+        footerInfo.setText("");
+        footer.setVisibility(View.GONE);
     }
 
     private void setFilter(int index) {
@@ -297,9 +394,11 @@ public final class ChannelListActivity extends Activity implements ChannelReposi
         filterAll.setTextColor(filter == 0 ? Tv.TEXT : Tv.TEXT_2);
         filterFree.setTextColor(filter == 1 ? Tv.TEXT : Tv.TEXT_2);
         filterHd.setTextColor(filter == 2 ? Tv.TEXT : Tv.TEXT_2);
+        filterFavourites.setTextColor(filter == 3 ? Tv.TEXT : Tv.TEXT_2);
         filterAll.setSelected(filter == 0);
         filterFree.setSelected(filter == 1);
         filterHd.setSelected(filter == 2);
+        filterFavourites.setSelected(filter == 3);
     }
 
     private void applyFilter(boolean moveFocus) {
@@ -311,13 +410,20 @@ public final class ChannelListActivity extends Activity implements ChannelReposi
             if (filter == 2 && !isHd(channel)) {
                 continue;
             }
+            if (filter == 3 && !favourites.contains(channel.getNumber())) {
+                continue;
+            }
             filtered.add(channel);
         }
         adapter.submit(filtered);
+        adapter.setFavouriteState(favourites, favouritesKnown);
         status.setText(getString(fromCache
                 ? R.string.channels_source_cached : R.string.channels_source_live));
         if (filtered.isEmpty()) {
-            emptyText.setText(R.string.channels_empty_filter);
+            emptyText.setText(filter == 3 && !favouritesKnown
+                    ? R.string.channels_favourites_sign_in
+                    : filter == 3 ? R.string.channels_empty_favourites
+                    : R.string.channels_empty_filter);
             emptyState.setVisibility(View.VISIBLE);
             progress.setVisibility(View.GONE);
             emptyState.post(() -> {
@@ -363,7 +469,10 @@ public final class ChannelListActivity extends Activity implements ChannelReposi
 
         allChannels.clear();
         allChannels.addAll(channels);
-        boolean same = adapter.hasSameContent(channels);
+        if (!reorderMode) {
+            applyServerOrder();
+        }
+        boolean same = adapter.hasSameContent(allChannels);
         if (!same || filter != 0) {
             applyFilter(false);
         } else {
@@ -415,8 +524,7 @@ public final class ChannelListActivity extends Activity implements ChannelReposi
     }
 
     private void updateAccount() {
-        Session session = Session.get(this);
-        if (session.isLoggedIn()) {
+        Session session = Session.get(this);        if (session.isLoggedIn()) {
             String name = session.displayName();
             if (TextUtils.isEmpty(name)) {
                 name = session.username();
@@ -441,6 +549,321 @@ public final class ChannelListActivity extends Activity implements ChannelReposi
                 return;
             }
         }
+    }
+
+    private void loadAccountChannels() {
+        if (accountLoading) {
+            return;
+        }
+        accountLoading = true;
+        Background.run(() -> {
+            List<Integer> favs = accountRepository.favourites(true);
+            List<Integer> order = accountRepository.order();
+            AccountLoad load = new AccountLoad();
+            load.favourites = favs;
+            load.order = order;
+            try {
+                load.subscriptions = accountRepository.subscribedNumbers();
+            } catch (ApiException ignored) {
+                load.subscriptions = new HashSet<>();
+            }
+            return load;
+        }, new Background.Result<AccountLoad>() {
+            @Override
+            public void onSuccess(AccountLoad load) {
+                accountLoading = false;
+                accountLoaded = true;
+                favourites.clear();
+                favourites.addAll(load.favourites);
+                favouritesKnown = true;
+                serverOrder.clear();
+                serverOrder.addAll(load.order);
+                orderApplied = false;
+                if (!reorderMode) {
+                    applyServerOrder();
+                }
+                if (openFavourites && filter != 3) {
+                    filter = 3;
+                    updateChips();
+                }
+                applyFilter(false);
+            }
+
+            @Override
+            public void onError(ApiException error) {
+                accountLoading = false;
+                favouritesKnown = false;
+                if (filter == 3) {
+                    applyFilter(false);
+                }
+            }
+        });
+    }
+
+    private void applyServerOrder() {
+        if (orderApplied || serverOrder.isEmpty() || allChannels.isEmpty()) {
+            return;
+        }
+        orderApplied = true;
+        Map<Integer, Integer> rank = new HashMap<>();
+        for (int i = 0; i < serverOrder.size(); i++) {
+            rank.put(serverOrder.get(i), i);
+        }
+        allChannels.sort((left, right) -> {
+            Integer leftRank = rank.get(left.getChannelId());
+            Integer rightRank = rank.get(right.getChannelId());
+            if (leftRank != null && rightRank != null) {
+                return Integer.compare(leftRank, rightRank);
+            }
+            if (leftRank != null) {
+                return -1;
+            }
+            if (rightRank != null) {
+                return 1;
+            }
+            return Integer.compare(left.getNumber(), right.getNumber());
+        });
+    }
+
+    private void toggleFavourite(Channel channel) {
+        if (!Session.get(this).isLoggedIn()) {
+            Toast.makeText(this, R.string.channels_favourites_sign_in,
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (!favouritesKnown) {
+            Toast.makeText(this, R.string.channels_favourites_loading,
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (channel.isVirtual() || channel.isSynthetic()) {
+            Toast.makeText(this, R.string.channels_favourite_not_allowed,
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        boolean add = !favourites.contains(channel.getNumber());
+        Background.run(() -> {
+            if (add) {
+                accountRepository.addFavourite(channel.getNumber());
+            } else {
+                accountRepository.removeFavourite(channel.getNumber());
+            }
+            return add;
+        }, new Background.Result<Boolean>() {
+            @Override
+            public void onSuccess(Boolean added) {
+                if (added) {
+                    favourites.add(channel.getNumber());
+                } else {
+                    favourites.remove(channel.getNumber());
+                }
+                applyFilter(false);
+                Toast.makeText(ChannelListActivity.this,
+                        getString(added ? R.string.channels_favourite_added
+                                : R.string.channels_favourite_removed),
+                        Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onError(ApiException error) {
+                Toast.makeText(ChannelListActivity.this,
+                        String.valueOf(error.getMessage()), Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void showOptions() {
+        if (!Session.get(this).isLoggedIn()) {
+            Toast.makeText(this, R.string.channels_favourites_sign_in,
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String[] options = {
+                getString(R.string.channels_options_reorder),
+                getString(R.string.channels_options_reset_favourites),
+                getString(R.string.channels_options_reset_order)
+        };
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.channels_options)
+                .setItems(options, (dialog, which) -> {
+                    if (which == 0) {
+                        enterReorder();
+                    } else if (which == 1) {
+                        confirmResetFavourites();
+                    } else {
+                        confirmResetOrder();
+                    }
+                })
+                .setNegativeButton(R.string.common_cancel, null)
+                .show();
+    }
+
+    private void enterReorder() {
+        if (allChannels.isEmpty()) {
+            return;
+        }
+        reorderMode = true;
+        reorderSnapshot = new ArrayList<>(allChannels);
+        if (filter != 0) {
+            filter = 0;
+            updateChips();
+        }
+        applyFilter(false);
+        reorderPosition = grid.hasFocus() && grid.getFocusedChild() != null
+                ? grid.getChildAdapterPosition(grid.getFocusedChild()) : 0;
+        if (reorderPosition < 0) {
+            reorderPosition = 0;
+        }
+        showFooter(R.string.channels_reorder_hint);
+        updateOptionsLabel();
+        focusPosition(reorderPosition);
+    }
+
+    private void exitReorder(boolean restore) {
+        reorderMode = false;
+        if (restore && reorderSnapshot != null) {
+            allChannels.clear();
+            allChannels.addAll(reorderSnapshot);
+        }
+        reorderSnapshot = null;
+        hideFooter();
+        applyFilter(false);
+        updateOptionsLabel();
+    }
+
+    private void saveReorder() {
+        List<Integer> ids = new ArrayList<>();
+        for (Channel channel : allChannels) {
+            ids.add(channel.getChannelId());
+        }
+        footerInfo.setText(R.string.channels_reorder_saving);
+        Background.run(() -> {
+            accountRepository.saveOrder(ids);
+            return ids;
+        }, new Background.Result<List<Integer>>() {
+            @Override
+            public void onSuccess(List<Integer> saved) {
+                serverOrder.clear();
+                serverOrder.addAll(saved);
+                orderApplied = true;
+                reorderSnapshot = null;
+                reorderMode = false;
+                hideFooter();
+                applyFilter(false);
+                updateOptionsLabel();
+                Toast.makeText(ChannelListActivity.this, R.string.channels_reorder_saved,
+                        Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onError(ApiException error) {
+                footerInfo.setText(R.string.channels_reorder_failed);
+                Toast.makeText(ChannelListActivity.this,
+                        String.valueOf(error.getMessage()), Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void confirmResetFavourites() {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.channels_reset_favourites_title)
+                .setMessage(R.string.channels_reset_favourites_body)
+                .setNegativeButton(R.string.common_cancel, null)
+                .setPositiveButton(R.string.common_ok, (dialog, which) -> resetFavourites())
+                .show();
+    }
+
+    private void resetFavourites() {
+        List<Integer> current = new ArrayList<>(favourites);
+        Background.run(() -> {
+            accountRepository.resetFavourites(current);
+            return current;
+        }, new Background.Result<List<Integer>>() {
+            @Override
+            public void onSuccess(List<Integer> cleared) {
+                favourites.removeAll(cleared);
+                applyFilter(false);
+                Toast.makeText(ChannelListActivity.this,
+                        R.string.channels_favourites_cleared, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onError(ApiException error) {
+                Toast.makeText(ChannelListActivity.this,
+                        String.valueOf(error.getMessage()), Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void confirmResetOrder() {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.channels_reset_order_title)
+                .setMessage(R.string.channels_reset_order_body)
+                .setNegativeButton(R.string.common_cancel, null)
+                .setPositiveButton(R.string.common_ok, (dialog, which) -> resetOrder())
+                .show();
+    }
+
+    private void resetOrder() {
+        Background.run(() -> {
+            accountRepository.resetOrder();
+            return Boolean.TRUE;
+        }, new Background.Result<Boolean>() {
+            @Override
+            public void onSuccess(Boolean ignored) {
+                serverOrder.clear();
+                orderApplied = false;
+                allChannels.sort((a, b) -> Integer.compare(a.getNumber(), b.getNumber()));
+                applyFilter(false);
+                Toast.makeText(ChannelListActivity.this, R.string.channels_order_reset,
+                        Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onError(ApiException error) {
+                Toast.makeText(ChannelListActivity.this,
+                        String.valueOf(error.getMessage()), Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void updateOptionsLabel() {
+        optionsAction.setText(getString(reorderMode
+                ? R.string.channels_options_done : R.string.channels_options));
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        if (reorderMode && event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
+            int key = event.getKeyCode();
+            if (key == android.view.KeyEvent.KEYCODE_BACK) {
+                exitReorder(true);
+                return true;
+            }
+            if (key == android.view.KeyEvent.KEYCODE_DPAD_CENTER
+                    || key == android.view.KeyEvent.KEYCODE_ENTER) {
+                saveReorder();
+                return true;
+            }
+            if (key == android.view.KeyEvent.KEYCODE_DPAD_UP
+                    || key == android.view.KeyEvent.KEYCODE_DPAD_DOWN) {
+                int from = grid.getFocusedChild() == null ? reorderPosition
+                        : grid.getChildAdapterPosition(grid.getFocusedChild());
+                if (from < 0) {
+                    from = reorderPosition;
+                }
+                int to = key == android.view.KeyEvent.KEYCODE_DPAD_UP ? from - 1 : from + 1;
+                if (from >= 0 && to >= 0 && to < adapter.getItemCount()) {
+                    Channel channel = allChannels.remove(from);
+                    allChannels.add(to, channel);
+                    adapter.move(from, to);
+                    reorderPosition = to;
+                    focusPosition(to);
+                }
+                return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     private void openChannel(Channel channel) {
@@ -480,5 +903,11 @@ public final class ChannelListActivity extends Activity implements ChannelReposi
                 });
             }
         });
+    }
+
+    private static final class AccountLoad {
+        List<Integer> favourites = new ArrayList<>();
+        List<Integer> order = new ArrayList<>();
+        Set<Integer> subscriptions = new HashSet<>();
     }
 }

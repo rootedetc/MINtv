@@ -1,10 +1,10 @@
 package local.mintv;
 
-import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.TextUtils;
@@ -27,6 +27,7 @@ import java.util.Locale;
 import local.mintv.data.Channel;
 import local.mintv.data.ChannelRepository;
 import local.mintv.data.CredentialStore;
+import local.mintv.data.LocalePreference;
 import local.mintv.data.Session;
 import local.mintv.epg.EpgChannel;
 import local.mintv.epg.EpgRepository;
@@ -39,12 +40,26 @@ import local.mintv.ui.TvRail;
  * Settings as a two-pane TV screen: destinations on the left, one quiet sheet on the
  * right. Everything shown is wired: account, quality, cache and what this app is.
  */
-public final class SettingsActivity extends Activity {
+public final class SettingsActivity extends BaseActivity {
 
     private static final int SECTION_ACCOUNT = 0;
-    private static final int SECTION_PLAYBACK = 1;
-    private static final int SECTION_GUIDE = 2;
-    private static final int SECTION_ABOUT = 3;
+    private static final int SECTION_LANGUAGE = 1;
+    private static final int SECTION_PLAYBACK = 2;
+    private static final int SECTION_GUIDE = 3;
+    private static final int SECTION_ABOUT = 4;
+
+    private static final String STATE_SECTION = "settings_section";
+
+    /** 236dp rail + 24dp gap + 540dp sheet = 800dp, the body width at 960dp. */
+    private static final int SETTINGS_GAP_DP = 24;
+
+    /**
+     * Inset that gives the focus lift room to draw. Category rows scale 1.02 (2.36dp
+     * per side), so 6dp is enough; option rows are inside the ScrollView and get 10dp
+     * because the ScrollView has to keep clipping vertically.
+     */
+    private static final int CATEGORY_INSET_DP = 6;
+    private static final int SHEET_INSET_DP = 10;
 
     private TvRail rail;
     private LinearLayout categoryList;
@@ -58,12 +73,21 @@ public final class SettingsActivity extends Activity {
         super.onCreate(savedInstanceState);
         version = readVersion();
         setContentView(buildUi());
+        if (savedInstanceState != null) {
+            section = savedInstanceState.getInt(STATE_SECTION, SECTION_ACCOUNT);
+        }
         if (getIntent() != null && Shell.SECTION_ACCOUNT.equals(
                 getIntent().getStringExtra(Shell.EXTRA_SECTION))) {
             section = SECTION_ACCOUNT;
         }
         showSection(section);
         categories.get(section).post(() -> categories.get(section).requestFocus());
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putInt(STATE_SECTION, section);
     }
 
     @Override
@@ -108,17 +132,29 @@ public final class SettingsActivity extends Activity {
 
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.HORIZONTAL);
+        // A focused row scales past its own bounds. Let that overflow travel into the
+        // body's 32dp padding instead of being cut at the padded edge, so the 2dp white
+        // rule is never cropped by the first parent that clips.
+        body.setClipChildren(false);
+        body.setClipToPadding(false);
         Tv.pad(body, 32, 4, 32, 24);
         main.addView(body, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         categoryList = new LinearLayout(this);
         categoryList.setOrientation(LinearLayout.VERTICAL);
+        categoryList.setClipChildren(false);
+        categoryList.setClipToPadding(false);
+        // Safe inset for the 1.02 category lift (236dp * 0.02 / 2 = 2.36dp per side).
+        Tv.pad(categoryList, CATEGORY_INSET_DP, CATEGORY_INSET_DP,
+                CATEGORY_INSET_DP, 0);
         body.addView(categoryList, new LinearLayout.LayoutParams(
                 Tv.dp(this, 236), ViewGroup.LayoutParams.MATCH_PARENT));
 
         CategoryRow account = new CategoryRow(SECTION_ACCOUNT, R.drawable.ic_account,
                 getString(R.string.settings_account), getString(R.string.settings_account_hint));
+        CategoryRow language = new CategoryRow(SECTION_LANGUAGE, R.drawable.ic_language,
+                getString(R.string.settings_language), getString(R.string.settings_language_hint));
         CategoryRow playback = new CategoryRow(SECTION_PLAYBACK, R.drawable.ic_tv,
                 getString(R.string.settings_playback), getString(R.string.settings_playback_hint));
         CategoryRow guide = new CategoryRow(SECTION_GUIDE, R.drawable.ic_guide,
@@ -126,6 +162,7 @@ public final class SettingsActivity extends Activity {
         CategoryRow about = new CategoryRow(SECTION_ABOUT, R.drawable.ic_info,
                 getString(R.string.settings_about), getString(R.string.settings_about_hint));
         categories.add(account);
+        categories.add(language);
         categories.add(playback);
         categories.add(guide);
         categories.add(about);
@@ -136,23 +173,33 @@ public final class SettingsActivity extends Activity {
             categoryList.addView(row, lp);
         }
 
+        // 236dp category rail + 24dp gap + the sheet filling the rest. At rest that is
+        // 540dp; when the source rail widens, the sheet shrinks with the body instead of
+        // pushing its right edge (and focus rings) off screen.
         View gap = new View(this);
-        body.addView(gap, new LinearLayout.LayoutParams(Tv.dp(this, 28), 1));
+        body.addView(gap, new LinearLayout.LayoutParams(
+                Tv.dp(this, SETTINGS_GAP_DP), 1));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.setVerticalScrollBarEnabled(false);
+        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         scroll.setClipToPadding(false);
+        // Vertical inset: the sheet still clips while scrolling (it must), but at the
+        // end of the scroll the last row keeps 8dp of room for its 1.015 lift.
+        Tv.pad(scroll, 0, SHEET_INSET_DP, 0, SHEET_INSET_DP);
         contentHost = new LinearLayout(this);
         contentHost.setOrientation(LinearLayout.VERTICAL);
-        Tv.pad(contentHost, 0, 0, 0, 20);
+        contentHost.setClipChildren(false);
+        contentHost.setClipToPadding(false);
+        // Horizontal inset: the ScrollView cannot have clipChildren=false without
+        // painting over the header, so the row lift has to happen inside its bounds.
+        // 10dp per side leaves ~6dp after a 520dp option row scales to 1.015.
+        Tv.pad(contentHost, SHEET_INSET_DP, 0, SHEET_INSET_DP, 16);
         scroll.addView(contentHost, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         body.addView(scroll, new LinearLayout.LayoutParams(
-                Tv.dp(this, 540), ViewGroup.LayoutParams.MATCH_PARENT));
-
-        View spacer = new View(this);
-        body.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1f));
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
 
         return root;
     }
@@ -178,6 +225,9 @@ public final class SettingsActivity extends Activity {
         }
         contentHost.removeAllViews();
         switch (index) {
+            case SECTION_LANGUAGE:
+                buildLanguage();
+                break;
             case SECTION_PLAYBACK:
                 buildPlayback();
                 break;
@@ -274,6 +324,24 @@ public final class SettingsActivity extends Activity {
             contentHost.addView(actions, topMargin(14));
         }
 
+        if (signedIn) {
+            LinearLayout library = new LinearLayout(this);
+            library.setOrientation(LinearLayout.HORIZONTAL);
+            TextView watchlist = Tv.ghost(this, getString(R.string.watchlist_title));
+            watchlist.setOnClickListener(view -> startActivity(
+                    new Intent(this, WatchlistActivity.class)));
+            library.addView(watchlist, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, Tv.dp(this, 46)));
+            TextView continueWatching = Tv.ghost(this, getString(R.string.cw_title));
+            LinearLayout.LayoutParams cwLp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, Tv.dp(this, 46));
+            cwLp.leftMargin = Tv.dp(this, 10);
+            continueWatching.setOnClickListener(view -> startActivity(
+                    new Intent(this, ContinueWatchingActivity.class)));
+            library.addView(continueWatching, cwLp);
+            contentHost.addView(library, topMargin(10));
+        }
+
     }
 
     private void confirmSignOut() {
@@ -288,6 +356,48 @@ public final class SettingsActivity extends Activity {
                             Toast.LENGTH_SHORT).show();
                 })
                 .show();
+    }
+
+    // ------------------------------------------------------------------ language
+
+    private void buildLanguage() {
+        contentHost.addView(sectionTitle(getString(R.string.settings_language_section),
+                getString(R.string.settings_language_body)));
+
+        TextView label = Tv.label(this, getString(R.string.settings_language_option), Tv.TEXT_3);
+        contentHost.addView(label, topMargin(18));
+
+        final String[] tags = {LocalePreference.HR, LocalePreference.EN};
+        final int[] titles = {R.string.language_croatian, R.string.language_english};
+        final int[] bodies = {R.string.language_croatian_body, R.string.language_english_body};
+        final OptionRow[] holders = new OptionRow[tags.length];
+        String selected = LocalePreference.get(this);
+        for (int i = 0; i < tags.length; i++) {
+            final String tag = tags[i];
+            OptionRow row = new OptionRow(getString(titles[i]), getString(bodies[i]),
+                    tag.equals(selected));
+            row.setOnClickListener(view -> selectLanguage(tag, tags, holders));
+            holders[i] = row;
+            contentHost.addView(row, topMargin(10));
+        }
+
+        TextView note = Tv.text(this, 13f, Tv.TEXT_3, false);
+        note.setText(R.string.settings_language_note);
+        note.setLineSpacing(Tv.dp(this, 2), 1f);
+        contentHost.addView(note, topMargin(18));
+    }
+
+    private void selectLanguage(String tag, String[] tags, OptionRow[] holders) {
+        if (tag.equals(LocalePreference.get(this))) {
+            return;
+        }
+        LocalePreference.set(this, tag);
+        for (int i = 0; i < holders.length; i++) {
+            holders[i].setSelected(tags[i].equals(tag));
+        }
+        // Rebuild this screen so every label switches immediately. The new instance
+        // wraps its context with the new preference; BaseActivity does not loop.
+        recreate();
     }
 
     // ------------------------------------------------------------------ playback
@@ -493,6 +603,23 @@ public final class SettingsActivity extends Activity {
         return lp;
     }
 
+    /**
+     * The default focus scroll only guarantees the row's layout bounds, which parks the
+     * 1.015 lift exactly on the ScrollView's clip line. Asking for an 8dp margin keeps
+     * the whole white rule and the lift visible at the top and bottom of the sheet.
+     */
+    private void keepRowVisible(View row) {
+        row.post(() -> {
+            if (!row.isFocused() || row.getWidth() == 0) {
+                return;
+            }
+            int margin = Tv.dp(this, 8);
+            Rect rect = new Rect(0, 0, row.getWidth(), row.getHeight());
+            rect.inset(-margin, -margin);
+            row.requestRectangleOnScreen(rect, false);
+        });
+    }
+
     private String readVersion() {
         try {
             PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
@@ -521,7 +648,6 @@ public final class SettingsActivity extends Activity {
             setClickable(true);
             setBackgroundResource(R.drawable.bg_settings_row);
             Tv.pad(this, 12, 0, 12, 0);
-            Tv.focusScale(this, 1.02f);
 
             tally = new View(SettingsActivity.this);
             tally.setBackgroundColor(Tv.BRAND);
@@ -618,6 +744,9 @@ public final class SettingsActivity extends Activity {
                         .scaleY(hasFocus ? 1.015f : 1f)
                         .setDuration(hasFocus ? 140L : 110L).start();
                 title.setTextColor(Tv.TEXT);
+                if (hasFocus) {
+                    keepRowVisible(this);
+                }
             });
         }
 

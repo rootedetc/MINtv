@@ -1,6 +1,5 @@
 package local.mintv;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
@@ -16,15 +15,19 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
+import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.common.TrackSelectionOverride;
+import androidx.media3.common.TrackSelectionParameters;
+import androidx.media3.common.Tracks;
+import androidx.media3.common.VideoSize;
 import androidx.media3.datasource.okhttp.OkHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
@@ -40,19 +43,22 @@ import java.util.Map;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import local.mintv.data.Channel;
+import local.mintv.data.BookmarkRepository;
+import local.mintv.data.ProgressUpdate;
 import local.mintv.data.Session;
 import local.mintv.epg.EpgCache;
 import local.mintv.epg.EpgProgram;
 import local.mintv.net.ApiException;
+import local.mintv.net.Background;
 import local.mintv.net.Http;
 import local.mintv.net.PlaybackApi;
 import local.mintv.player.ChannelQueue;
 import local.mintv.player.QualityPreference;
 import local.mintv.player.PlayerOverlay;
 import local.mintv.player.TuneIdent;
-import local.mintv.player.QualityPreference;
 import local.mintv.player.StartupPolicy;
 
 /**
@@ -81,7 +87,7 @@ import local.mintv.player.StartupPolicy;
  * hypothetical case of a CDN/data-source combination that does not expose the redirect target.</p>
  */
 @OptIn(markerClass = UnstableApi.class)
-public final class PlayerActivity extends Activity {
+public final class PlayerActivity extends BaseActivity {
 
     public static final String EXTRA_URL = "local.mintv.extra.URL";
     public static final String EXTRA_TITLE = "local.mintv.extra.TITLE";
@@ -97,6 +103,20 @@ public final class PlayerActivity extends Activity {
     public static final String EXTRA_PROGRAMME_TITLE = "local.mintv.extra.PROGRAMME_TITLE";
     public static final String EXTRA_PROGRAMME_START = "local.mintv.extra.PROGRAMME_START";
     public static final String EXTRA_PROGRAMME_END = "local.mintv.extra.PROGRAMME_END";
+
+    /** Continue Watching identity. Empty {@link #EXTRA_CONTENT_TYPE} means "never report". */
+    public static final String EXTRA_CONTENT_TYPE = "local.mintv.extra.CONTENT_TYPE";
+    public static final String EXTRA_CONTENT_ID = "local.mintv.extra.CONTENT_ID";
+    public static final String EXTRA_PROGRAM_ID = "local.mintv.extra.PROGRAM_ID";
+    public static final String EXTRA_MEDIA_ID = "local.mintv.extra.MEDIA_ID";
+    public static final String EXTRA_STATION_ID = "local.mintv.extra.STATION_ID";
+    public static final String EXTRA_SERIES_ID = "local.mintv.extra.SERIES_ID";
+    public static final String EXTRA_SEASON_ID = "local.mintv.extra.SEASON_ID";
+    public static final String EXTRA_LISTING_GUID = "local.mintv.extra.LISTING_GUID";
+    public static final String EXTRA_RUNTIME_SECONDS = "local.mintv.extra.RUNTIME_SECONDS";
+    public static final String EXTRA_RESUME_SECONDS = "local.mintv.extra.RESUME_SECONDS";
+    public static final String EXTRA_CATCHUP_START = "local.mintv.extra.CATCHUP_START";
+    public static final String EXTRA_CATCHUP_END = "local.mintv.extra.CATCHUP_END";
 
     /** Public, clear DASH VOD used to prove playback independently of MAXtv/CDN changes. */
     public static final String DEMO_DASH_URL =
@@ -124,6 +144,8 @@ public final class PlayerActivity extends Activity {
     private TuneIdent tuneIdent;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    /** Re-reads track labels after a selection; ExoPlayer publishes new Tracks asynchronously. */
+    private final Runnable refreshTracksRunnable = this::refreshPlaybackOptions;
     private final Runnable hideSeekHud = () -> seekHud.setVisibility(View.GONE);
     private static final long BUFFERING_BADGE_DELAY_MS = 1_500L;
     private final Runnable showBufferingBadge = () -> {
@@ -149,6 +171,45 @@ public final class PlayerActivity extends Activity {
     private boolean started;
     private boolean preparingMedia;
 
+    // --------------------------------------------------------------- bookmarks
+    private BookmarkRepository bookmarkRepository;
+    private String bookmarkType = "";
+    private String bookmarkId = "";
+    private String bookmarkProgramId = "";
+    private String bookmarkMediaId = "";
+    private String bookmarkStationId = "";
+    private String bookmarkSeriesId = "";
+    private String bookmarkSeasonId = "";
+    private String bookmarkListingGuid = "";
+    private long bookmarkRuntimeSeconds;
+    private long bookmarkStart;
+    private long bookmarkEnd;
+    private volatile ProgressUpdate lastSent;
+    private volatile boolean bookmarkSending;
+    private static final long BOOKMARK_INTERVAL_MS = 5_000L;
+
+    private final Runnable bookmarkTick = new Runnable() {
+        @Override
+        public void run() {
+            if (player == null || bookmarkType.isEmpty() || !player.isPlaying()) {
+                return;
+            }
+            long pos = player.getCurrentPosition() / 1000L;
+            long dur = player.getDuration() / 1000L;
+            if (pos <= 0 || dur <= 0) {
+                scheduleBookmarkTick();
+                return;
+            }
+            ProgressUpdate update = snapshot(pos, dur);
+            if (update.equals(lastSent) || bookmarkSending) {
+                scheduleBookmarkTick();
+                return;
+            }
+            sendBookmark(update, true);
+            scheduleBookmarkTick();
+        }
+    };
+
     // --------------------------------------------------------------- fast start
     private DefaultTrackSelector trackSelector;
     private StartupPolicy.Phase phase = StartupPolicy.Phase.STARTUP;
@@ -160,6 +221,8 @@ public final class PlayerActivity extends Activity {
     private boolean preflightFallbackUsed;
     private int startupRetries;
     private QualityPreference.Quality quality = QualityPreference.Quality.AUTO;
+    /** Last label rendered in the overlay; compared before touching the views. */
+    private String actualQuality = "";
     private static final long STARTUP_WATCHDOG_MS = 6_000L;
     private static final int STARTUP_MAX_RETRIES = 2;
     private int manifestLoads;
@@ -174,16 +237,37 @@ public final class PlayerActivity extends Activity {
                 if (tuneIdent != null) {
                     tuneIdent.hide();
                 }
+                updateActualQuality();
+                refreshPlaybackOptions();
             } else if (playbackState == Player.STATE_BUFFERING) {
                 watchForSteadyStateRebuffer();
+            } else if (playbackState == Player.STATE_ENDED) {
+                completeBookmark();
             }
             updateState();
+        }
+
+        @Override
+        public void onTracksChanged(@NonNull Tracks tracks) {
+            updateActualQuality();
+            refreshPlaybackOptions();
+        }
+
+        @Override
+        public void onVideoSizeChanged(@NonNull VideoSize videoSize) {
+            updateActualQuality();
         }
 
         @Override
         public void onIsPlayingChanged(boolean isPlaying) {
             updateState();
             pushOverlayPlaybackState();
+            if (isPlaying) {
+                bookmarksStart();
+            } else {
+                flushBookmark();
+                handler.removeCallbacks(bookmarkTick);
+            }
             // If the ramp was postponed (paused/buffering during the startup window), retry as
             // soon as playback is actually running again so the steady state still converges.
             if (isPlaying && player != null && phase == StartupPolicy.Phase.STARTUP
@@ -244,11 +328,11 @@ public final class PlayerActivity extends Activity {
                 : channel.getQuality();
         Intent intent = new Intent(context, PlayerActivity.class);
         intent.putExtra(EXTRA_URL, channel.getDashUrl());
-        intent.putExtra(EXTRA_TITLE, channel.getTitle());
+        intent.putExtra(EXTRA_TITLE, channel.getTitle(context));
         intent.putExtra(EXTRA_SUBTITLE, context.getString(
                 R.string.player_channel_subtitle, channel.getNumber(), quality));
         intent.putExtra(EXTRA_CHANNEL_NUMBER, channel.getNumber());
-        intent.putExtra(EXTRA_CHANNEL_TITLE, channel.getTitle());
+        intent.putExtra(EXTRA_CHANNEL_TITLE, channel.getTitle(context));
         intent.putExtra(EXTRA_CHANNEL_QUALITY, quality);
         return intent;
     }
@@ -265,8 +349,22 @@ public final class PlayerActivity extends Activity {
         return intent;
     }
 
-    public static Intent intentForDemo(Context context) {
+    /** VOD / catch-up media without a channel identity (details and search watch actions). */
+    public static Intent intentForMedia(Context context, String manifestUrl, String licenseUrl,
+                                        String licenseAuth, String title, String subtitle) {
         Intent intent = new Intent(context, PlayerActivity.class);
+        intent.putExtra(EXTRA_URL, manifestUrl);
+        intent.putExtra(EXTRA_TITLE, title);
+        intent.putExtra(EXTRA_SUBTITLE, subtitle);
+        intent.putExtra(EXTRA_LIVE, false);
+        if (licenseUrl != null && !licenseUrl.isEmpty()) {
+            intent.putExtra(EXTRA_DRM_LICENSE_URL, licenseUrl);
+            intent.putExtra(EXTRA_DRM_AUTH, licenseAuth);
+        }
+        return intent;
+    }
+
+    public static Intent intentForDemo(Context context) {        Intent intent = new Intent(context, PlayerActivity.class);
         intent.putExtra(EXTRA_URL, DEMO_DASH_URL);
         intent.putExtra(EXTRA_TITLE, context.getString(R.string.player_demo_title));
         intent.putExtra(EXTRA_SUBTITLE, context.getString(R.string.player_demo_subtitle));
@@ -298,6 +396,8 @@ public final class PlayerActivity extends Activity {
         playbackApi = new PlaybackApi(this);
         liveSession = getIntent().getBooleanExtra(EXTRA_LIVE, true);
         currentChannel = liveSession ? ChannelQueue.current() : null;
+        bookmarkRepository = new BookmarkRepository(this);
+        readBookmarkExtras();
 
         // Rich TiviMate-style overlay owns the top-left channel card, top-right clock,
         // bottom programme card and the DOWN quick-switch strip.
@@ -319,20 +419,32 @@ public final class PlayerActivity extends Activity {
                     }
 
                     @Override
-                    public void onQualityChanged() {
-                        applyQualityNow();
+                    public void onQualityPicked(QualityPreference.Quality picked) {
+                        applyQualityPreference(picked);
+                    }
+
+                    @Override
+                    public void onAudioTrackPicked(String optionId) {
+                        applyAudioTrack(optionId);
+                    }
+
+                    @Override
+                    public void onSubtitleTrackPicked(String optionId) {
+                        applySubtitleTrack(optionId);
                     }
                 });
         overlay.setChannelList(ChannelQueue.channels(), ChannelQueue.index());
         if (liveSession && currentChannel != null) {
-            overlay.setChannel(currentChannel, resolutionLabel());
+            overlay.setChannel(currentChannel, null);
         } else {
             overlay.setChannelInfo(
                     getIntent().getIntExtra(EXTRA_CHANNEL_NUMBER, -1),
                     getIntent().getStringExtra(EXTRA_CHANNEL_TITLE),
-                    getIntent().getStringExtra(EXTRA_CHANNEL_QUALITY));
+                    null);
             overlay.setChannelList(java.util.Collections.emptyList(), -1);
         }
+        overlay.setActualQuality(getString(R.string.player_quality_unknown));
+        actualQuality = getString(R.string.player_quality_unknown);
         overlay.setLive(liveSession);
         if (!liveSession) {
             overlay.setProgramme(
@@ -381,6 +493,10 @@ public final class PlayerActivity extends Activity {
             resumePositionMs = saved > 0 ? saved : C.TIME_UNSET;
             playWhenReady = savedInstanceState.getBoolean("playing", true);
         }
+        long requestedResume = getIntent().getLongExtra(EXTRA_RESUME_SECONDS, 0L);
+        if (resumePositionMs == C.TIME_UNSET && requestedResume > 0 && !liveSession) {
+            resumePositionMs = requestedResume * 1000L;
+        }
     }
 
     @Override
@@ -405,6 +521,8 @@ public final class PlayerActivity extends Activity {
     protected void onStop() {
         started = false;
         playbackGeneration++; // invalidate pending ramp/steady-state callbacks
+        flushBookmark();
+        handler.removeCallbacks(bookmarkTick);
         if (player != null) {
             resumePositionMs = player.getCurrentPosition();
             playWhenReady = player.getPlayWhenReady();
@@ -540,6 +658,8 @@ public final class PlayerActivity extends Activity {
         playerView.setPlayer(created);
         playerView.requestFocus();
         player = created;
+        resetActualQuality();
+        refreshPlaybackOptions();
         playMedia(mediaUrl, resumePositionMs, playWhenReady);
     }
 
@@ -555,6 +675,7 @@ public final class PlayerActivity extends Activity {
         playbackGeneration++;
         playbackUrl = url;
         quality = QualityPreference.get(this);
+        resetActualQuality();
         // MAX/SAVER lock a single rendition for the whole session: no ramp, so no switch.
         phase = quality == QualityPreference.Quality.AUTO
                 ? StartupPolicy.Phase.STARTUP
@@ -862,6 +983,7 @@ public final class PlayerActivity extends Activity {
         @Override
         public void run() {
             pushOverlayPlaybackState();
+            updateActualQuality();
             // Refresh now/next when a programme boundary passes.
             if (overlay != null && overlay.isVisible() && currentChannel != null) {
                 applyProgrammeToOverlay(currentChannel, System.currentTimeMillis());
@@ -933,27 +1055,238 @@ public final class PlayerActivity extends Activity {
                 duration == C.TIME_UNSET ? 0L : duration);
     }
 
-    /** Resolution chip text, from the decoder's current video size when available. */
-    private String resolutionLabel() {
+    /** Resets the overlay's quality readout until the new stream produces its first frame. */
+    private void resetActualQuality() {
+        actualQuality = getString(R.string.player_quality_unknown);
+        if (overlay != null) {
+            overlay.setActualQuality(actualQuality);
+        }
+    }
+
+    /**
+     * Reads the resolution the decoder is actually producing. This is deliberately based on
+     * {@link Player#getVideoFormat()} rather than the preference, so a fallback to 720p is
+     * visible as 720p.
+     */
+    private void updateActualQuality() {
+        if (overlay == null) {
+            return;
+        }
+        String label = getString(R.string.player_quality_unknown);
+        Format format = player == null ? null : player.getVideoFormat();
+        if (format != null && format.height > 0) {
+            int width = format.width;
+            int height = format.height;
+            if (height >= 2000) {
+                label = width >= 3800 ? "4K" : "2160p";
+            } else if (height >= 1000) {
+                label = "1080p";
+            } else if (height >= 700) {
+                label = "720p";
+            } else {
+                label = height + "p";
+            }
+        }
+        if (!label.equals(actualQuality)) {
+            actualQuality = label;
+            overlay.setActualQuality(label);
+        }
+    }
+
+    /** Pushes the current quality preference and the player's audio/text track options. */
+    private void refreshPlaybackOptions() {
+        if (overlay == null) {
+            return;
+        }
+        List<PlayerOverlay.TrackOption> audio = new ArrayList<>();
+        List<PlayerOverlay.TrackOption> subtitles = new ArrayList<>();
+        String currentAudioLabel = "";
+        String currentSubtitleLabel = "";
+
         if (player != null) {
-            int height = player.getVideoSize().height;
-            if (height >= 2160) {
-                return "4K";
+            List<Tracks.Group> groups = player.getCurrentTracks().getGroups();
+            for (int groupIndex = 0; groupIndex < groups.size(); groupIndex++) {
+                Tracks.Group group = groups.get(groupIndex);
+                if (group == null) {
+                    continue;
+                }
+                int type = group.getType();
+                if (type != C.TRACK_TYPE_AUDIO && type != C.TRACK_TYPE_TEXT) {
+                    continue;
+                }
+                for (int trackIndex = 0; trackIndex < group.length; trackIndex++) {
+                    Format format = group.getTrackFormat(trackIndex);
+                    boolean selected = group.isTrackSelected(trackIndex);
+                    String label = trackLabel(format, trackIndex);
+                    String id = groupIndex + ":" + trackIndex;
+                    if (type == C.TRACK_TYPE_AUDIO) {
+                        audio.add(new PlayerOverlay.TrackOption(id, label, selected));
+                        if (selected) {
+                            currentAudioLabel = label;
+                        }
+                    } else {
+                        subtitles.add(new PlayerOverlay.TrackOption(id, label, selected));
+                        if (selected) {
+                            currentSubtitleLabel = label;
+                        }
+                    }
+                }
             }
-            if (height >= 1080) {
-                return "FULL HD";
+
+            Format audioFormat = player.getAudioFormat();
+            if (TextUtils.isEmpty(currentAudioLabel) && audioFormat != null) {
+                currentAudioLabel = trackLabel(audioFormat, 0);
             }
-            if (height >= 720) {
-                return "HD";
-            }
-            if (height > 0) {
-                return height + "p";
+            Format textFormat = selectedTextFormat();
+            if (textFormat != null) {
+                currentSubtitleLabel = trackLabel(textFormat, 0);
+            } else {
+                currentSubtitleLabel = "";
             }
         }
-        if (currentChannel != null && !TextUtils.isEmpty(currentChannel.getQuality())) {
-            return currentChannel.getQuality();
+        if (TextUtils.isEmpty(currentAudioLabel)) {
+            currentAudioLabel = getString(R.string.player_track_default);
         }
-        return "HD";
+        overlay.setPlaybackOptions(quality, audio, subtitles,
+                currentAudioLabel, currentSubtitleLabel);
+    }
+
+    /** The selected text track, or null when subtitles are off (Media3 1.4 has no getTextFormat). */
+    private Format selectedTextFormat() {
+        if (player == null) {
+            return null;
+        }
+        List<Tracks.Group> groups = player.getCurrentTracks().getGroups();
+        for (Tracks.Group group : groups) {
+            if (group == null || group.getType() != C.TRACK_TYPE_TEXT) {
+                continue;
+            }
+            for (int i = 0; i < group.length; i++) {
+                if (group.isTrackSelected(i)) {
+                    return group.getTrackFormat(i);
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Human label for a track: its own label, else its language, else a neutral fallback. */
+    private String trackLabel(Format format, int trackIndex) {
+        if (format == null) {
+            return getString(R.string.player_track_default);
+        }
+        if (!TextUtils.isEmpty(format.label)) {
+            return format.label;
+        }
+        if (!TextUtils.isEmpty(format.language) && !"und".equalsIgnoreCase(format.language)) {
+            Locale locale = Locale.getDefault();
+            String display = Locale.forLanguageTag(format.language).getDisplayLanguage(locale);
+            if (!TextUtils.isEmpty(display) && !"und".equalsIgnoreCase(display)) {
+                return capitalize(display);
+            }
+            return format.language.toUpperCase(Locale.US);
+        }
+        String fallback = getString(R.string.player_track_default);
+        return trackIndex == 0 ? fallback : fallback + " " + (trackIndex + 1);
+    }
+
+    private static String capitalize(String value) {
+        if (value == null || value.isEmpty()) {
+            return value;
+        }
+        return Character.toUpperCase(value.charAt(0)) + value.substring(1);
+    }
+
+    private static int[] parseOptionId(String optionId) {
+        if (TextUtils.isEmpty(optionId)) {
+            return null;
+        }
+        int colon = optionId.indexOf(':');
+        if (colon <= 0 || colon >= optionId.length() - 1) {
+            return null;
+        }
+        try {
+            return new int[]{
+                    Integer.parseInt(optionId.substring(0, colon)),
+                    Integer.parseInt(optionId.substring(colon + 1))
+            };
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** Applies a new quality preference without restarting the stream. */
+    private void applyQualityPreference(QualityPreference.Quality picked) {
+        if (picked == null) {
+            return;
+        }
+        quality = picked;
+        QualityPreference.set(this, picked);
+        phase = StartupPolicy.Phase.STEADY;
+        // AUTO may fall back again after a stall; explicit MAX/SAVER choices never do.
+        steadyStartedAtMs = picked == QualityPreference.Quality.AUTO
+                ? SystemClock.elapsedRealtime() : C.TIME_UNSET;
+        applyTrackParameters();
+        updateActualQuality();
+        refreshPlaybackOptions();
+    }
+
+    private void applyAudioTrack(String optionId) {
+        if (player == null) {
+            return;
+        }
+        int[] indices = parseOptionId(optionId);
+        if (indices == null) {
+            return;
+        }
+        List<Tracks.Group> groups = player.getCurrentTracks().getGroups();
+        if (indices[0] < 0 || indices[0] >= groups.size()) {
+            return;
+        }
+        Tracks.Group group = groups.get(indices[0]);
+        if (group == null || group.getType() != C.TRACK_TYPE_AUDIO
+                || indices[1] < 0 || indices[1] >= group.length) {
+            return;
+        }
+        TrackSelectionParameters.Builder builder =
+                player.getTrackSelectionParameters().buildUpon();
+        builder.setOverrideForType(new TrackSelectionOverride(
+                group.getMediaTrackGroup(), indices[1]));
+        player.setTrackSelectionParameters(builder.build());
+        handler.removeCallbacks(refreshTracksRunnable);
+        handler.postDelayed(refreshTracksRunnable, 150L);
+    }
+
+    private void applySubtitleTrack(String optionId) {
+        if (player == null) {
+            return;
+        }
+        TrackSelectionParameters.Builder builder = player.getTrackSelectionParameters()
+                .buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT);
+        if (TextUtils.isEmpty(optionId)) {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true);
+        } else {
+            int[] indices = parseOptionId(optionId);
+            if (indices == null) {
+                return;
+            }
+            List<Tracks.Group> groups = player.getCurrentTracks().getGroups();
+            if (indices[0] < 0 || indices[0] >= groups.size()) {
+                return;
+            }
+            Tracks.Group group = groups.get(indices[0]);
+            if (group == null || group.getType() != C.TRACK_TYPE_TEXT
+                    || indices[1] < 0 || indices[1] >= group.length) {
+                return;
+            }
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .setOverrideForType(new TrackSelectionOverride(
+                            group.getMediaTrackGroup(), indices[1]));
+        }
+        player.setTrackSelectionParameters(builder.build());
+        handler.removeCallbacks(refreshTracksRunnable);
+        handler.postDelayed(refreshTracksRunnable, 150L);
     }
 
     // ------------------------------------------------------------------ overlay
@@ -974,13 +1307,14 @@ public final class PlayerActivity extends Activity {
     private void playChannel(Channel channel) {
         currentChannel = channel;
         startupRetries = 0;
-        String quality = TextUtils.isEmpty(channel.getQuality()) ? "HD" : channel.getQuality();
-        mediaTitle = channel.getTitle();
+        mediaTitle = channel.getTitle(this);
         if (overlay != null) {
-            overlay.setChannel(channel, quality);
+            overlay.setChannel(channel, null);
             overlay.setLive(true);
+            overlay.setActualQuality(getString(R.string.player_quality_unknown));
             applyProgrammeToOverlay(channel, System.currentTimeMillis());
         }
+        resetActualQuality();
 
         Session session = Session.get(this);
         if (channel.isFreeToAir()) {
@@ -1067,6 +1401,139 @@ public final class PlayerActivity extends Activity {
         handler.postDelayed(hideSeekHud, 800L);
     }
 
+    // --------------------------------------------------------------- bookmarks
+
+    private void readBookmarkExtras() {
+        bookmarkType = getIntent().getStringExtra(EXTRA_CONTENT_TYPE);
+        if (bookmarkType == null) {
+            bookmarkType = "";
+        }
+        bookmarkType = bookmarkType.trim().toUpperCase(java.util.Locale.US);
+        if (liveSession || bookmarkType.isEmpty()
+                || !("VOD".equals(bookmarkType) || "CATCHUP".equals(bookmarkType)
+                || "RECORDING".equals(bookmarkType))) {
+            bookmarkType = "";
+            return;
+        }
+        bookmarkId = stringExtra(EXTRA_CONTENT_ID);
+        bookmarkProgramId = stringExtra(EXTRA_PROGRAM_ID);
+        bookmarkMediaId = stringExtra(EXTRA_MEDIA_ID);
+        bookmarkStationId = stringExtra(EXTRA_STATION_ID);
+        bookmarkSeriesId = stringExtra(EXTRA_SERIES_ID);
+        bookmarkSeasonId = stringExtra(EXTRA_SEASON_ID);
+        bookmarkListingGuid = stringExtra(EXTRA_LISTING_GUID);
+        bookmarkRuntimeSeconds = getIntent().getLongExtra(EXTRA_RUNTIME_SECONDS, 0L);
+        bookmarkStart = getIntent().getLongExtra(EXTRA_CATCHUP_START, 0L);
+        bookmarkEnd = getIntent().getLongExtra(EXTRA_CATCHUP_END, 0L);
+    }
+
+    private String stringExtra(String key) {
+        String value = getIntent().getStringExtra(key);
+        return value == null ? "" : value;
+    }
+
+    private void bookmarksStart() {
+        if (bookmarkType.isEmpty()) {
+            return;
+        }
+        handler.removeCallbacks(bookmarkTick);
+        handler.postDelayed(bookmarkTick, BOOKMARK_INTERVAL_MS);
+    }
+
+    private void scheduleBookmarkTick() {
+        handler.removeCallbacks(bookmarkTick);
+        if (!bookmarkType.isEmpty()) {
+            handler.postDelayed(bookmarkTick, BOOKMARK_INTERVAL_MS);
+        }
+    }
+
+    private ProgressUpdate snapshot(long positionSeconds, long durationSeconds) {
+        long runtime = durationSeconds > 0 ? durationSeconds : bookmarkRuntimeSeconds;
+        return ProgressUpdate.builder(bookmarkType)
+                .id(bookmarkId)
+                .programId(bookmarkProgramId)
+                .mediaId(bookmarkMediaId)
+                .stationId(bookmarkStationId)
+                .listingGuid(bookmarkListingGuid)
+                .seriesId(bookmarkSeriesId)
+                .seasonId(bookmarkSeasonId)
+                .time(positionSeconds)
+                .runtime(runtime)
+                .startTime(bookmarkStart)
+                .endTime(bookmarkEnd)
+                .build();
+    }
+
+    private void sendBookmark(ProgressUpdate update, boolean tracked) {
+        if (bookmarkType.isEmpty() || update == null || update.timeSeconds <= 0
+                || update.runtimeSeconds <= 0) {
+            return;
+        }
+        if (bookmarkSending) {
+            pendingBookmark = update;
+            return;
+        }
+        bookmarkSending = true;
+        Background.run(() -> {
+            bookmarkRepository.save(update);
+            return update;
+        }, new Background.Result<ProgressUpdate>() {
+            @Override
+            public void onSuccess(ProgressUpdate sent) {
+                bookmarkSending = false;
+                lastSent = sent;
+                ProgressUpdate pending = pendingBookmark;
+                pendingBookmark = null;
+                if (pending != null && !pending.equals(sent)) {
+                    sendBookmark(pending, tracked);
+                }
+            }
+
+            @Override
+            public void onError(ApiException error) {
+                bookmarkSending = false;
+                ProgressUpdate pending = pendingBookmark;
+                pendingBookmark = null;
+                // lastSent stays unchanged, so the next tick retries the newest snapshot.
+                if (pending != null) {
+                    sendBookmark(pending, tracked);
+                }
+            }
+        });
+    }
+
+    private void flushBookmark() {
+        if (player == null || bookmarkType.isEmpty()) {
+            return;
+        }
+        long pos = player.getCurrentPosition() / 1000L;
+        long dur = player.getDuration() / 1000L;
+        if (pos <= 0 || dur <= 0) {
+            return;
+        }
+        ProgressUpdate update = snapshot(pos, dur);
+        if (!update.equals(lastSent)) {
+            sendBookmark(update, false);
+        }
+    }
+
+    private void completeBookmark() {
+        if (bookmarkType.isEmpty() || player == null) {
+            return;
+        }
+        long dur = player.getDuration() / 1000L;
+        if (dur <= 0) {
+            dur = bookmarkRuntimeSeconds;
+        }
+        if (dur <= 0) {
+            return;
+        }
+        ProgressUpdate update = snapshot(dur, dur);
+        sendBookmark(update, false);
+    }
+
+    private volatile ProgressUpdate pendingBookmark;
+
     private void updateState() {
         if (player == null) {
             return;
@@ -1090,27 +1557,6 @@ public final class PlayerActivity extends Activity {
         } else {
             handler.removeCallbacks(showBufferingBadge);
             stateView.setVisibility(View.GONE);
-        }
-    }
-
-    private void applyQualityNow() {
-        String label;
-        switch (QualityPreference.get(this)) {
-            case MAX:
-                label = getString(R.string.quality_short_max);
-                break;
-            case SAVER:
-                label = getString(R.string.quality_short_saver);
-                break;
-            default:
-                label = getString(R.string.quality_short_auto);
-                break;
-        }
-        Toast.makeText(this, getString(R.string.player_quality_changed, label),
-                Toast.LENGTH_SHORT).show();
-        if (liveSession && currentChannel != null) {
-            // Re-tune the same channel so the new cap/ramp policy is applied immediately.
-            playChannel(currentChannel);
         }
     }
 

@@ -1,9 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Settings category row: focus is the only outline (2dp white). The active section is
+    carried by the magenta tally + label and a flat raised fill, never by a second rule.
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <solid android:color="@color/surface_focus" />
             <stroke android:width="2dp" android:color="@color/focus_ring" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/surface_2" />
             <corners android:radius="10dp" />
         </shape>
     </item>

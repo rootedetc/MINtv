@@ -170,6 +170,20 @@ public final class HttpMinTvApi implements MinTvApi {
         Session session = Session.get(appContext);
         session.save(accessToken, refresh == null ? "" : refresh, "Bearer", expiresAt, username, "");
         session.saveRaw(sessionJson.toString());
+        session.saveAccount(loginResp);
+        if (sessionJson != loginResp) {
+            session.saveAccount(sessionJson);
+        }
+        try {
+            JSONObject user = BffApi.get(appContext, "/user/account",
+                    BffApi.query("fresh_login", "false"), true);
+            session.saveAccount(user);
+        } catch (ApiException e) {
+            Log.w(TAG, "user/account failed: " + e.getMessage());
+        }
+        Log.i(TAG, "account headers channelMap=" + !session.channelMapId().isEmpty()
+                + " user=" + !session.userId().isEmpty()
+                + " details=" + !session.accountDetails().isEmpty());
         Log.i(TAG, "login complete, token=" + redact(accessToken)
                 + " expiresAt=" + expiresAt);
         return session;

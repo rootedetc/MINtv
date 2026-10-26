@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 import local.mintv.R;
 import local.mintv.data.Channel;
@@ -27,14 +28,36 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
         void onChannelClick(Channel channel);
     }
 
+    public interface OnChannelLongClick {
+        void onChannelLongClick(Channel channel);
+    }
+
     private final List<Channel> channels = new ArrayList<>();
     private final OnChannelClick listener;
+    private OnChannelLongClick longClickListener;
     private int spanCount = 6;
     private int railFocusId = View.NO_ID;
+    private java.util.Set<Integer> favourites = java.util.Collections.emptySet();
+    private boolean favouriteKnown;
 
     public ChannelAdapter(OnChannelClick listener) {
         this.listener = listener;
         setHasStableIds(true);
+    }
+
+    public ChannelAdapter(OnChannelClick listener, OnChannelLongClick longClickListener) {
+        this(listener);
+        this.longClickListener = longClickListener;
+    }
+
+    public void setFavouriteState(java.util.Set<Integer> numbers, boolean known) {
+        favourites = numbers == null ? java.util.Collections.emptySet() : numbers;
+        favouriteKnown = known;
+        notifyDataSetChanged();
+    }
+
+    public void setLongClickListener(OnChannelLongClick listener) {
+        this.longClickListener = listener;
     }
 
     public void setSpanCount(int spanCount) {
@@ -81,6 +104,22 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
         return Collections.unmodifiableList(channels);
     }
 
+    /** Moves one row in the local reorder preview. */
+    public int move(int from, int to) {
+        if (from < 0 || from >= channels.size() || to < 0 || to >= channels.size()
+                || from == to) {
+            return from;
+        }
+        Channel channel = channels.remove(from);
+        channels.add(to, channel);
+        notifyItemMoved(from, to);
+        return to;
+    }
+
+    public int indexOf(Channel channel) {
+        return channels.indexOf(channel);
+    }
+
     @Override
     public long getItemId(int position) {
         Channel channel = channels.get(position);
@@ -100,7 +139,8 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
 
     @Override
     public void onBindViewHolder(@NonNull ChannelHolder holder, int position) {
-        holder.bind(channels.get(position), position, spanCount, railFocusId);
+        holder.bind(channels.get(position), position, spanCount, railFocusId,
+                favourites, favouriteKnown, longClickListener);
     }
 
     @Override
@@ -111,10 +151,10 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
     static final class ChannelHolder extends RecyclerView.ViewHolder {
 
         private final ImageView logo;
+        private final ImageView favourite;
         private final TextView number;
         private final TextView title;
         private final TextView quality;
-        private final View free;
         private final TextView now;
         private final ProgressBar progress;
         private Channel channel;
@@ -122,10 +162,10 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
         ChannelHolder(View itemView, OnChannelClick listener) {
             super(itemView);
             logo = itemView.findViewById(R.id.channel_logo);
+            favourite = itemView.findViewById(R.id.channel_favourite);
             number = itemView.findViewById(R.id.channel_number);
             title = itemView.findViewById(R.id.channel_title);
             quality = itemView.findViewById(R.id.channel_quality);
-            free = itemView.findViewById(R.id.channel_free);
             now = itemView.findViewById(R.id.channel_now);
             progress = itemView.findViewById(R.id.channel_progress);
 
@@ -146,22 +186,36 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
             });
         }
 
-        void bind(Channel newChannel, int position, int spanCount, int railFocusId) {
+        void bind(Channel newChannel, int position, int spanCount, int railFocusId,
+                  java.util.Set<Integer> favourites, boolean favouriteKnown,
+                  OnChannelLongClick longClickListener) {
             this.channel = newChannel;
             boolean focused = itemView.isFocused();
             itemView.setScaleX(focused ? 1.035f : 1f);
             itemView.setScaleY(focused ? 1.035f : 1f);
 
+            boolean isFavourite = favourites.contains(newChannel.getNumber());
+            favourite.setVisibility(favouriteKnown && isFavourite
+                    ? View.VISIBLE : View.GONE);
+            favourite.setImageResource(R.drawable.ic_favorite);
+            favourite.setColorFilter(Tv.BRAND_BRIGHT);
+            itemView.setOnLongClickListener(view -> {
+                if (longClickListener != null) {
+                    longClickListener.onChannelLongClick(newChannel);
+                    return true;
+                }
+                return false;
+            });
+
             number.setText(newChannel.getNumber() >= 0
                     ? String.valueOf(newChannel.getNumber()) : "–");
-            title.setText(newChannel.getTitle());
-            quality.setText(newChannel.getQuality());
-            quality.setVisibility(newChannel.getQuality().isEmpty()
-                    ? View.GONE : View.VISIBLE);
-            free.setVisibility(newChannel.isFreeToAir() ? View.VISIBLE : View.GONE);
+            title.setText(newChannel.getTitle(itemView.getContext()));
+            String cardQuality = qualityLabel(newChannel.getQuality());
+            quality.setText(cardQuality);
+            quality.setVisibility(cardQuality.isEmpty() ? View.GONE : View.VISIBLE);
             String description = itemView.getContext().getString(
                     R.string.channel_description,
-                    newChannel.getTitle(),
+                    newChannel.getTitle(itemView.getContext()),
                     newChannel.getNumber());
             if (newChannel.isFreeToAir()) {
                 description += ", " + itemView.getContext().getString(
@@ -189,6 +243,33 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
             }
 
             ImageLoader.load(logo, newChannel.getLogoUrl());
+        }
+
+        /**
+         * The card-sized quality label. Empty quality means there is nothing truthful to show.
+         * FHD/1080 and UHD/4K collapse to one label each; unknown values pass through uppercase.
+         */
+        private static String qualityLabel(String quality) {
+            if (quality == null) {
+                return "";
+            }
+            String value = quality.trim().toUpperCase(Locale.US);
+            if (value.isEmpty()) {
+                return "";
+            }
+            if (value.contains("UHD") || value.contains("4K")) {
+                return "4K";
+            }
+            if (value.contains("FHD") || value.contains("1080") || value.contains("FULL HD")) {
+                return "FULL HD";
+            }
+            if (value.contains("HD")) {
+                return "HD";
+            }
+            if (value.contains("SD")) {
+                return "SD";
+            }
+            return value;
         }
     }
 }

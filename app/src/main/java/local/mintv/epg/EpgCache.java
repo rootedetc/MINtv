@@ -29,6 +29,11 @@ public final class EpgCache {
         return channels.isEmpty();
     }
 
+    /** Immutable snapshot of the loaded day, in line-up order. */
+    public static List<EpgChannel> channelsSnapshot() {
+        return channels;
+    }
+
     public static EpgChannel channel(int number) {
         for (EpgChannel channel : channels) {
             if (channel.number == number) {

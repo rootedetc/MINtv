@@ -1,6 +1,7 @@
 package local.mintv.player;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.widget.Toast;
 
 import org.json.JSONException;
@@ -11,7 +12,10 @@ import java.util.List;
 import local.mintv.PlayerActivity;
 import local.mintv.R;
 import local.mintv.data.Channel;
+import local.mintv.data.BookmarkRepository;
+import local.mintv.data.ContinueWatchingItem;
 import local.mintv.data.Session;
+import local.mintv.details.WatchAction;
 import local.mintv.epg.EpgChannel;
 import local.mintv.epg.EpgProgram;
 import local.mintv.net.ApiException;
@@ -108,6 +112,25 @@ public final class PlaybackLauncher {
                 intent.putExtra(PlayerActivity.EXTRA_PROGRAMME_TITLE, program.title);
                 intent.putExtra(PlayerActivity.EXTRA_PROGRAMME_START, program.startMs);
                 intent.putExtra(PlayerActivity.EXTRA_PROGRAMME_END, program.endMs);
+                if (!startOver) {
+                    ContinueWatchingItem resume = new BookmarkRepository(activity)
+                            .resumeFor(program.id, program.catchupId);
+                    intent.putExtra(PlayerActivity.EXTRA_CONTENT_TYPE, "CATCHUP");
+                    intent.putExtra(PlayerActivity.EXTRA_CONTENT_ID,
+                            program.catchupId.isEmpty() ? program.id : program.catchupId);
+                    intent.putExtra(PlayerActivity.EXTRA_PROGRAM_ID, program.id);
+                    intent.putExtra(PlayerActivity.EXTRA_MEDIA_ID, program.mediaId);
+                    intent.putExtra(PlayerActivity.EXTRA_STATION_ID, channel.stationId);
+                    intent.putExtra(PlayerActivity.EXTRA_LISTING_GUID, program.listingGuid);
+                    intent.putExtra(PlayerActivity.EXTRA_RUNTIME_SECONDS,
+                            Math.max(0L, program.durationMs() / 1000L));
+                    intent.putExtra(PlayerActivity.EXTRA_CATCHUP_START, program.startMs);
+                    intent.putExtra(PlayerActivity.EXTRA_CATCHUP_END, program.endMs);
+                    if (resume != null) {
+                        intent.putExtra(PlayerActivity.EXTRA_RESUME_SECONDS,
+                                resume.timeSeconds);
+                    }
+                }
                 activity.runOnUiThread(() -> activity.startActivity(intent));
             }
 
@@ -122,6 +145,120 @@ public final class PlaybackLauncher {
         } else {
             api.resolveCatchup(channel, program, callback);
         }
+    }
+
+    /**
+     * VOD playback for a details/search/home watch action.
+     */
+    public static void openProgram(Activity activity, String programId, String mediaId,
+                                   String title, String subtitle, String seriesId,
+                                   String seasonId, long runtimeSeconds, long resumeSeconds) {
+        if (activity == null || programId == null || programId.isEmpty()) {
+            return;
+        }
+        if (!Session.get(activity).isLoggedIn()) {
+            Toast.makeText(activity, R.string.error_sign_in_required, Toast.LENGTH_LONG).show();
+            return;
+        }
+        new PlaybackApi(activity).resolveProgram(programId, mediaId, new PlaybackApi.Callback() {
+            @Override
+            public void onReady(PlaybackApi.Playback playback) {
+                Intent intent = PlayerActivity.intentForMedia(activity, playback.manifestUrl,
+                        playback.licenseUrl, playback.licenseAuthorization, title, subtitle);
+                intent.putExtra(PlayerActivity.EXTRA_CONTENT_TYPE, "VOD");
+                intent.putExtra(PlayerActivity.EXTRA_CONTENT_ID, programId);
+                intent.putExtra(PlayerActivity.EXTRA_PROGRAM_ID, programId);
+                intent.putExtra(PlayerActivity.EXTRA_MEDIA_ID, mediaId);
+                intent.putExtra(PlayerActivity.EXTRA_SERIES_ID, seriesId);
+                intent.putExtra(PlayerActivity.EXTRA_SEASON_ID, seasonId);
+                intent.putExtra(PlayerActivity.EXTRA_RUNTIME_SECONDS, runtimeSeconds);
+                intent.putExtra(PlayerActivity.EXTRA_RESUME_SECONDS, resumeSeconds);
+                activity.runOnUiThread(() -> activity.startActivity(intent));
+            }
+
+            @Override
+            public void onFailure(ApiException error) {
+                activity.runOnUiThread(() -> Toast.makeText(activity,
+                        String.valueOf(error.getMessage()), Toast.LENGTH_LONG).show());
+            }
+        });
+    }
+
+    /** Catch-up from a details action. */
+    public static void openCatchup(Activity activity, WatchAction action, String programId,
+                                   String title, String seriesId, long runtimeSeconds,
+                                   long resumeSeconds) {
+        if (activity == null || action == null) {
+            return;
+        }
+        new PlaybackApi(activity).resolveCatchup(programId, action.stationId,
+                action.startUtc, action.endUtc, action.channelNumber, action.listingGuid,
+                new PlaybackApi.Callback() {
+                    @Override
+                    public void onReady(PlaybackApi.Playback playback) {
+                        Intent intent = PlayerActivity.intentForMedia(activity,
+                                playback.manifestUrl, playback.licenseUrl,
+                                playback.licenseAuthorization, title,
+                                activity.getString(R.string.player_time_shift));
+                        intent.putExtra(PlayerActivity.EXTRA_CONTENT_TYPE, "CATCHUP");
+                        intent.putExtra(PlayerActivity.EXTRA_CONTENT_ID,
+                                action.listingGuid.isEmpty() ? programId : action.listingGuid);
+                        intent.putExtra(PlayerActivity.EXTRA_PROGRAM_ID, programId);
+                        intent.putExtra(PlayerActivity.EXTRA_MEDIA_ID, action.mediaId);
+                        intent.putExtra(PlayerActivity.EXTRA_STATION_ID, action.stationId);
+                        intent.putExtra(PlayerActivity.EXTRA_SERIES_ID, seriesId);
+                        intent.putExtra(PlayerActivity.EXTRA_LISTING_GUID, action.listingGuid);
+                        intent.putExtra(PlayerActivity.EXTRA_RUNTIME_SECONDS, runtimeSeconds);
+                        intent.putExtra(PlayerActivity.EXTRA_RESUME_SECONDS, resumeSeconds);
+                        intent.putExtra(PlayerActivity.EXTRA_CATCHUP_START, action.startUtc);
+                        intent.putExtra(PlayerActivity.EXTRA_CATCHUP_END, action.endUtc);
+                        activity.runOnUiThread(() -> activity.startActivity(intent));
+                    }
+
+                    @Override
+                    public void onFailure(ApiException error) {
+                        activity.runOnUiThread(() -> Toast.makeText(activity,
+                                String.valueOf(error.getMessage()), Toast.LENGTH_LONG).show());
+                    }
+                });
+    }
+
+    /** Continue Watching catch-up tile; the bookmark already carries every identity field. */
+    public static void openCatchup(Activity activity, ContinueWatchingItem item) {
+        if (activity == null || item == null) {
+            return;
+        }
+        new PlaybackApi(activity).resolveCatchup(item.programId, item.stationId,
+                item.startTime, item.endTime, item.channelNumber, item.listingGuid,
+                new PlaybackApi.Callback() {
+                    @Override
+                    public void onReady(PlaybackApi.Playback playback) {
+                        Intent intent = PlayerActivity.intentForMedia(activity,
+                                playback.manifestUrl, playback.licenseUrl,
+                                playback.licenseAuthorization, item.displayTitle(),
+                                activity.getString(R.string.player_time_shift));
+                        intent.putExtra(PlayerActivity.EXTRA_CONTENT_TYPE, "CATCHUP");
+                        intent.putExtra(PlayerActivity.EXTRA_CONTENT_ID, item.id);
+                        intent.putExtra(PlayerActivity.EXTRA_PROGRAM_ID, item.programId);
+                        intent.putExtra(PlayerActivity.EXTRA_MEDIA_ID, item.mediaId);
+                        intent.putExtra(PlayerActivity.EXTRA_STATION_ID, item.stationId);
+                        intent.putExtra(PlayerActivity.EXTRA_SERIES_ID, item.seriesId);
+                        intent.putExtra(PlayerActivity.EXTRA_SEASON_ID, item.seasonId);
+                        intent.putExtra(PlayerActivity.EXTRA_LISTING_GUID, item.listingGuid);
+                        intent.putExtra(PlayerActivity.EXTRA_RUNTIME_SECONDS,
+                                item.runtimeSeconds);
+                        intent.putExtra(PlayerActivity.EXTRA_RESUME_SECONDS, item.timeSeconds);
+                        intent.putExtra(PlayerActivity.EXTRA_CATCHUP_START, item.startTime);
+                        intent.putExtra(PlayerActivity.EXTRA_CATCHUP_END, item.endTime);
+                        activity.runOnUiThread(() -> activity.startActivity(intent));
+                    }
+
+                    @Override
+                    public void onFailure(ApiException error) {
+                        activity.runOnUiThread(() -> Toast.makeText(activity,
+                                String.valueOf(error.getMessage()), Toast.LENGTH_LONG).show());
+                    }
+                });
     }
 
     /**

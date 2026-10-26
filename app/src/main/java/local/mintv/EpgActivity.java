@@ -1,7 +1,7 @@
 package local.mintv;
 
-import android.app.Activity;
 import android.graphics.Bitmap;
+import android.graphics.drawable.BitmapDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -13,7 +13,6 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -40,6 +39,7 @@ import local.mintv.player.PlaybackLauncher;
 import local.mintv.ui.EpgLogoLoader;
 import local.mintv.ui.ImageLoader;
 import local.mintv.ui.Shell;
+import local.mintv.ui.Skeleton;
 import local.mintv.ui.Tv;
 import local.mintv.ui.TvRail;
 
@@ -48,7 +48,7 @@ import local.mintv.ui.TvRail;
  * armature, and an on-air bar that shows the focused programme's artwork, synopsis,
  * running time, progress and channel.
  */
-public final class EpgActivity extends Activity implements EpgGridView.Listener {
+public final class EpgActivity extends BaseActivity implements EpgGridView.Listener {
 
     private EpgGridView grid;
     private TvRail rail;
@@ -56,6 +56,7 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
     private EpgLogoLoader epgLogos;
     private EpgLogoLoader inspectorLogos;
 
+    private FrameLayout guideHost;
     private View loading;
     private View errorBar;
     private TextView errorText;
@@ -68,16 +69,18 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
     private TextView descriptionLabel;
     private TextView channelNumber;
     private TextView channelName;
-    private TextView channelMeta;
     private ImageView channelLogo;
     private ImageView programmePoster;
     private View posterFallback;
     private TextView posterNumber;
     private TextView nextTitle;
     private TextView nextTime;
-    private TextView actionHint;
     private View progressFill;
     private View progressRest;
+
+    private static final int ON_AIR_HEIGHT_DP = 152;
+    private static final int ON_AIR_TRACK_DP = 3;
+    private static final int ON_AIR_POSTER_HEIGHT_DP = 112;
 
     private final Map<Integer, Channel> lineUp = new HashMap<>();
     private final SimpleDateFormat clock =
@@ -92,11 +95,26 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
     private int detailsRequest;
     private long dayStartMs;
     private boolean firstDelivery = true;
+    private String stateTag = "";
+    private float progressFraction = -1f;
 
     private final Runnable progressTick = new Runnable() {
         @Override
         public void run() {
-            updateProgress(System.currentTimeMillis());
+            long now = System.currentTimeMillis();
+            long today = localMidnight(now);
+            if (today != dayStartMs) {
+                // The guide stayed open across midnight: move to the new day instead of
+                // leaving last night's schedule on screen until the next resume.
+                dayStartMs = today;
+                grid.setDayStartMs(dayStartMs);
+                grid.setNowMs(now);
+                updateHeaderDate();
+                firstDelivery = true;
+                loadGuide(false);
+            } else {
+                updateProgress(now);
+            }
             handler.postDelayed(this, 15_000L);
         }
     };
@@ -122,9 +140,6 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
                 lineUp.clear();
                 for (Channel channel : channels) {
                     lineUp.put(channel.getNumber(), channel);
-                }
-                if (focusedChannel != null) {
-                    updateAction(focusedChannel, focusedProgram);
                 }
             }
 
@@ -185,9 +200,9 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
 
     private void loadGuide(boolean force) {
         errorBar.setVisibility(View.GONE);
-        loading.setVisibility(View.VISIBLE);
+        showGuideSkeleton();
         epgRepository.loadDay(iso.format(new Date(dayStartMs)), this::onEpgLoaded, message -> {
-            loading.setVisibility(View.GONE);
+            hideGuideSkeleton();
             errorText.setText(TextUtils.isEmpty(message)
                     ? getString(R.string.guide_error) : message);
             errorBar.setVisibility(View.VISIBLE);
@@ -198,7 +213,7 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
     }
 
     private void onEpgLoaded(List<EpgChannel> channels) {
-        loading.setVisibility(View.GONE);
+        hideGuideSkeleton();
         errorBar.setVisibility(View.GONE);
         EpgCache.set(channels);
         grid.setChannels(channels);
@@ -272,15 +287,21 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
         grid.setPalette(Tv.BRAND, Tv.BRAND_BRIGHT, Tv.BG, Tv.BG_RAISED,
                 Tv.SURFACE, Tv.TEXT, Tv.TEXT_2);
         grid.setListener(this);
-        content.addView(grid, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        content.addView(buildOnAirBar(), new LinearLayout.LayoutParams(
+        LinearLayout guideArea = new LinearLayout(this);
+        guideArea.setOrientation(LinearLayout.VERTICAL);
+        guideArea.addView(grid, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        guideArea.addView(buildOnAirBar(), new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(152)));
 
-        loading = buildLoading();
-        root.addView(loading, new FrameLayout.LayoutParams(
+        // The loading skeleton covers the guide surface only: the rail, header and error bar
+        // never move or disappear underneath a spinner.
+        guideHost = new FrameLayout(this);
+        guideHost.addView(guideArea, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        content.addView(guideHost, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         return root;
     }
@@ -330,10 +351,7 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
 
         TextView retry = Tv.ghost(this, getString(R.string.guide_retry));
         errorRetry = retry;
-        retry.setOnClickListener(view -> {
-            loading.setVisibility(View.VISIBLE);
-            loadGuide(true);
-        });
+        retry.setOnClickListener(view -> loadGuide(true));
         LinearLayout.LayoutParams retryLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, dp(36));
         retryLp.leftMargin = dp(16);
@@ -350,6 +368,8 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
         LinearLayout track = new LinearLayout(this);
         track.setOrientation(LinearLayout.HORIZONTAL);
         track.setBackgroundColor(Tv.STROKE);
+        // The fill only ever gets the weights below; at 0 % it has zero width, so the
+        // magenta can never read as a completed programme.
         progressFill = new View(this);
         progressFill.setBackgroundColor(Tv.BRAND);
         progressRest = new View(this);
@@ -361,15 +381,27 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
         root.addView(track, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(3)));
 
-        LinearLayout body = new LinearLayout(this);
-        body.setOrientation(LinearLayout.HORIZONTAL);
-        body.setGravity(Gravity.CENTER_VERTICAL);
-        Tv.pad(body, 24, 12, 24, 12);
+        // The body is a frame so the state tag can sit at the top-right of the bar, on the
+        // same right edge as the NEXT column, without joining the channel identity row.
+        FrameLayout body = new FrameLayout(this);
         root.addView(body, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
+        LinearLayout bodyRow = new LinearLayout(this);
+        bodyRow.setOrientation(LinearLayout.HORIZONTAL);
+        bodyRow.setGravity(Gravity.CENTER_VERTICAL);
+        // 152 dp bar - 3 dp track = 149 dp of body. The poster is 112 dp, so 12 dp
+        // top/bottom leaves 13 dp of air and keeps the 200x112 artwork inside the bar
+        // without touching the screen edge.
+        int bodyPadV = Math.min(12,
+                Math.max(0, (ON_AIR_HEIGHT_DP - ON_AIR_TRACK_DP - ON_AIR_POSTER_HEIGHT_DP) / 2));
+        Tv.pad(bodyRow, 24, bodyPadV, 24, bodyPadV);
+        body.addView(bodyRow, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
         FrameLayout posterFrame = new FrameLayout(this);
-        posterFrame.setBackground(Tv.box(this, Tv.SURFACE_2, 7f, Tv.STROKE_STRONG, 1f));
+        // Broadcast frame, not a card: square artwork edge with a hairline.
+        posterFrame.setBackground(Tv.box(this, Tv.SURFACE_2, 0f, Tv.STROKE_STRONG, 1f));
         posterFrame.setClipToOutline(true);
 
         programmePoster = new ImageView(this);
@@ -385,7 +417,7 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
         posterNumber = Tv.numeral(this, 42f, Tv.BRAND);
         posterNumber.setGravity(Gravity.CENTER);
         fallback.addView(posterNumber);
-        TextView fallbackLabel = Tv.label(this, "KANAL", Tv.TEXT_3);
+        TextView fallbackLabel = Tv.label(this, getString(R.string.channel_fallback), Tv.TEXT_3);
         fallbackLabel.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams fallbackLabelLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -395,14 +427,15 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         posterFallback = fallback;
 
-        body.addView(posterFrame, new LinearLayout.LayoutParams(dp(200), dp(112)));
+        bodyRow.addView(posterFrame, new LinearLayout.LayoutParams(
+                dp(200), dp(ON_AIR_POSTER_HEIGHT_DP)));
 
         LinearLayout info = new LinearLayout(this);
         info.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams infoLp = new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         infoLp.leftMargin = dp(18);
-        body.addView(info, infoLp);
+        bodyRow.addView(info, infoLp);
 
         LinearLayout channelRow = new LinearLayout(this);
         channelRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -423,23 +456,14 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
 
         LinearLayout channelNames = new LinearLayout(this);
         channelNames.setOrientation(LinearLayout.VERTICAL);
+        channelNames.setGravity(Gravity.CENTER_VERTICAL);
         channelName = Tv.displayText(this, 15f, Tv.TEXT);
         channelName.setSingleLine(true);
         channelName.setEllipsize(TextUtils.TruncateAt.END);
         channelNames.addView(channelName);
-        channelMeta = Tv.label(this, "", Tv.TEXT_3);
-        channelMeta.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 10f);
-        LinearLayout.LayoutParams metaLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        metaLp.topMargin = dp(3);
-        channelNames.addView(channelMeta, metaLp);
         channelRow.addView(channelNames, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        stateLabel = Tv.label(this, "", 0xFFFFFFFF);
-        stateLabel.setPadding(dp(8), dp(3), dp(8), dp(3));
-        stateLabel.setBackgroundResource(R.drawable.bg_chip_live);
-        channelRow.addView(stateLabel);
         info.addView(channelRow);
 
         titleLabel = Tv.displayText(this, 27f, Tv.TEXT);
@@ -447,7 +471,7 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
         titleLabel.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        titleLp.topMargin = dp(7);
+        titleLp.topMargin = dp(4);
         info.addView(titleLabel, titleLp);
 
         timeLabel = Tv.text(this, 12.5f, Tv.TEXT_2, false);
@@ -456,30 +480,40 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
         timeLabel.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams timeLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        timeLp.topMargin = dp(3);
+        timeLp.topMargin = dp(2);
         info.addView(timeLabel, timeLp);
 
         descriptionLabel = Tv.text(this, 13f, Tv.TEXT_2, false);
         descriptionLabel.setMaxLines(2);
         descriptionLabel.setEllipsize(TextUtils.TruncateAt.END);
-        descriptionLabel.setLineSpacing(dp(2), 1f);
+        descriptionLabel.setLineSpacing(dp(1), 1f);
         LinearLayout.LayoutParams descLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        descLp.topMargin = dp(5);
+        descLp.topMargin = dp(4);
         info.addView(descriptionLabel, descLp);
+
+        // A 1 px hairline separates the programme copy from the NEXT column, the way the
+        // broadcast lower third does. It is shorter than the bar and clears the state tag.
+        View nextDivider = new View(this);
+        nextDivider.setBackgroundColor(Tv.STROKE);
+        LinearLayout.LayoutParams dividerLp = new LinearLayout.LayoutParams(
+                Math.max(1, dp(1)), dp(76));
+        dividerLp.leftMargin = dp(18);
+        dividerLp.gravity = Gravity.CENTER_VERTICAL;
+        bodyRow.addView(nextDivider, dividerLp);
 
         LinearLayout next = new LinearLayout(this);
         next.setOrientation(LinearLayout.VERTICAL);
         next.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams nextLp = new LinearLayout.LayoutParams(dp(218),
                 ViewGroup.LayoutParams.WRAP_CONTENT);
-        nextLp.leftMargin = dp(20);
-        body.addView(next, nextLp);
+        nextLp.leftMargin = dp(18);
+        bodyRow.addView(next, nextLp);
 
         TextView nextLabel = Tv.label(this, getString(R.string.guide_next), Tv.TEXT_3);
         nextLabel.setGravity(Gravity.END);
         next.addView(nextLabel);
-        nextTitle = Tv.displayText(this, 15f, Tv.TEXT);
+        nextTitle = Tv.displayText(this, 17f, Tv.TEXT);
         nextTitle.setGravity(Gravity.END);
         nextTitle.setSingleLine(true);
         nextTitle.setEllipsize(TextUtils.TruncateAt.END);
@@ -490,42 +524,279 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
         nextTime = Tv.text(this, 11.5f, Tv.TEXT_3, false);
         nextTime.setGravity(Gravity.END);
         nextTime.setFontFeatureSettings("tnum");
+        nextTime.setSingleLine(true);
+        nextTime.setEllipsize(TextUtils.TruncateAt.END);
         next.addView(nextTime);
 
-        actionHint = Tv.label(this, "", Tv.BRAND_BRIGHT);
-        actionHint.setGravity(Gravity.END);
-        actionHint.setSingleLine(true);
-        actionHint.setEllipsize(TextUtils.TruncateAt.END);
-        LinearLayout.LayoutParams hintLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        hintLp.topMargin = dp(10);
-        next.addView(actionHint, hintLp);
+        // State tag: top-right of the bar, right edge flush with the NEXT column. NEXT is
+        // vertically centred in the body, so the tag sits above its label with clear air
+        // instead of covering the next title on a tight bar.
+        stateLabel = Tv.label(this, "", 0xFFFFFFFF);
+        stateLabel.setGravity(Gravity.CENTER);
+        stateLabel.setPadding(dp(8), dp(3), dp(8), dp(3));
+        stateLabel.setBackgroundResource(R.drawable.bg_chip_live);
+        FrameLayout.LayoutParams stateLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.END);
+        stateLp.topMargin = dp(12);
+        stateLp.rightMargin = dp(24);
+        body.addView(stateLabel, stateLp);
 
         return root;
     }
 
-    private View buildLoading() {
-        LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setGravity(Gravity.CENTER);
-        panel.setBackgroundColor(Tv.BG);
+    // ------------------------------------------------------------------ loading
 
-        ProgressBar spinner = new ProgressBar(this);
-        spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(Tv.BRAND));
-        LinearLayout.LayoutParams spinnerLp = new LinearLayout.LayoutParams(dp(38), dp(38));
-        spinnerLp.bottomMargin = dp(14);
-        panel.addView(spinner, spinnerLp);
+    private static final int GUIDE_SKELETON_ROWS = 5;
 
-        TextView label = Tv.text(this, 15f, Tv.TEXT_2, false);
-        label.setText(R.string.guide_loading);
-        panel.addView(label);
-        return panel;
+    /** Programme-block widths per skeleton row, as weights of the visible 4-hour window. */
+    private static final float[][] SKELETON_BLOCKS = {
+            {0.95f, 0.55f, 1.30f, 0.90f},
+            {1.15f, 0.90f, 0.70f, 0.95f},
+            {0.70f, 1.25f, 1.05f, 0.80f},
+            {1.05f, 0.75f, 0.60f, 1.30f},
+            {0.85f, 1.10f, 1.20f, 0.70f}
+    };
+
+    private void showGuideSkeleton() {
+        if (guideHost == null || loading != null) {
+            return;
+        }
+        loading = buildGuideSkeleton();
+        guideHost.addView(loading, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    private void hideGuideSkeleton() {
+        if (guideHost == null || loading == null) {
+            return;
+        }
+        // Removing the view (rather than hiding it) also cancels the pulse animator.
+        guideHost.removeView(loading);
+        loading = null;
+    }
+
+    /**
+     * A quiet Broadcast Rail skeleton for the guide region alone: the real ruler, channel
+     * column and on-air bar geometry, filled with flat SURFACE_2/SURFACE_3 plates. The rail,
+     * header and error bar stay visible; nothing outside this overlay moves or pulses.
+     */
+    private View buildGuideSkeleton() {
+        // Opaque ground stays outside the pulsing group, so the empty grid underneath (and
+        // its "no schedule" line) can never ghost through the 55-90% opacity pulse.
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Tv.BG);
+        root.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        root.setContentDescription(getString(R.string.common_loading));
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        root.addView(content, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        LinearLayout guide = new LinearLayout(this);
+        guide.setOrientation(LinearLayout.HORIZONTAL);
+        content.addView(guide, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        guide.addView(buildSkeletonChannelColumn(), new LinearLayout.LayoutParams(
+                dp(244), ViewGroup.LayoutParams.MATCH_PARENT));
+        guide.addView(buildSkeletonTimeline(), new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+
+        content.addView(buildSkeletonOnAirBar(), new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(152)));
+
+        Skeleton.pulse(content);
+        return root;
+    }
+
+    private View buildSkeletonChannelColumn() {
+        LinearLayout column = new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setBackgroundColor(Tv.BG_RAISED);
+
+        LinearLayout corner = new LinearLayout(this);
+        corner.setGravity(Gravity.CENTER_VERTICAL);
+        Tv.pad(corner, 12, 0, 12, 0);
+        corner.addView(Skeleton.line(this, 58f, 12f));
+        column.addView(corner, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(40)));
+
+        for (int row = 0; row < GUIDE_SKELETON_ROWS; row++) {
+            LinearLayout cell = new LinearLayout(this);
+            cell.setOrientation(LinearLayout.HORIZONTAL);
+            cell.setGravity(Gravity.CENTER_VERTICAL);
+            Tv.pad(cell, 12, 0, 12, 0);
+            cell.addView(Skeleton.line(this, 22f, 12f));
+
+            LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(dp(48), dp(32));
+            logoLp.leftMargin = dp(8);
+            cell.addView(Skeleton.box(this, 48f, 32f, 5f), logoLp);
+
+            LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(0, dp(12), 1f);
+            nameLp.leftMargin = dp(9);
+            cell.addView(Skeleton.line(this, 0f, 12f), nameLp);
+
+            column.addView(cell, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
+        }
+        return column;
+    }
+
+    private View buildSkeletonTimeline() {
+        LinearLayout timeline = new LinearLayout(this);
+        timeline.setOrientation(LinearLayout.VERTICAL);
+
+        LinearLayout ruler = new LinearLayout(this);
+        ruler.setOrientation(LinearLayout.HORIZONTAL);
+        ruler.setGravity(Gravity.CENTER_VERTICAL);
+        Tv.pad(ruler, 8, 0, 8, 0);
+        for (int slot = 0; slot < 4; slot++) {
+            LinearLayout lane = new LinearLayout(this);
+            lane.setOrientation(LinearLayout.HORIZONTAL);
+            lane.setGravity(Gravity.CENTER_VERTICAL);
+            lane.addView(Skeleton.line(this, 34f, 10f));
+            ruler.addView(lane, new LinearLayout.LayoutParams(0,
+                    ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        }
+        timeline.addView(ruler, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(40)));
+
+        for (int row = 0; row < GUIDE_SKELETON_ROWS; row++) {
+            LinearLayout lane = new LinearLayout(this);
+            lane.setOrientation(LinearLayout.HORIZONTAL);
+            lane.setGravity(Gravity.CENTER_VERTICAL);
+            Tv.pad(lane, 4, 3, 4, 3);
+            float[] weights = SKELETON_BLOCKS[row % SKELETON_BLOCKS.length];
+            for (float weight : weights) {
+                LinearLayout.LayoutParams blockLp =
+                        new LinearLayout.LayoutParams(0, dp(46), weight);
+                blockLp.leftMargin = dp(1);
+                blockLp.rightMargin = dp(1);
+                lane.addView(Skeleton.box(this, 0f, 46f, 6f), blockLp);
+            }
+            timeline.addView(lane, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
+        }
+        return timeline;
+    }
+
+    private View buildSkeletonOnAirBar() {
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.VERTICAL);
+        bar.setBackgroundColor(Tv.BG_RAISED);
+
+        bar.addView(Skeleton.line(this, 0f, 3f), new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(3)));
+
+        FrameLayout body = new FrameLayout(this);
+        bar.addView(body, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        LinearLayout bodyRow = new LinearLayout(this);
+        bodyRow.setOrientation(LinearLayout.HORIZONTAL);
+        bodyRow.setGravity(Gravity.CENTER_VERTICAL);
+        int bodyPadV = Math.min(12,
+                Math.max(0, (ON_AIR_HEIGHT_DP - ON_AIR_TRACK_DP - ON_AIR_POSTER_HEIGHT_DP) / 2));
+        Tv.pad(bodyRow, 24, bodyPadV, 24, bodyPadV);
+        body.addView(bodyRow, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        bodyRow.addView(Skeleton.box(this, 200f, 112f, 0f),
+                new LinearLayout.LayoutParams(dp(200), dp(ON_AIR_POSTER_HEIGHT_DP)));
+
+        LinearLayout info = new LinearLayout(this);
+        info.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams infoLp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        infoLp.leftMargin = dp(18);
+        bodyRow.addView(info, infoLp);
+
+        LinearLayout ident = new LinearLayout(this);
+        ident.setOrientation(LinearLayout.HORIZONTAL);
+        ident.setGravity(Gravity.CENTER_VERTICAL);
+        ident.addView(Skeleton.box(this, 48f, 30f, 4f),
+                new LinearLayout.LayoutParams(dp(48), dp(30)));
+        LinearLayout.LayoutParams numberLp = new LinearLayout.LayoutParams(dp(22), dp(12));
+        numberLp.leftMargin = dp(10);
+        ident.addView(Skeleton.line(this, 22f, 12f), numberLp);
+        LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(0, dp(12), 1f);
+        nameLp.leftMargin = dp(9);
+        ident.addView(Skeleton.line(this, 0f, 12f), nameLp);
+        info.addView(ident);
+
+        info.addView(skeletonLane(0.62f, 22f), skeletonLaneParams(10));
+        info.addView(skeletonLane(0.38f, 12f), skeletonLaneParams(8));
+        info.addView(skeletonLane(0.92f, 10f), skeletonLaneParams(7));
+        info.addView(skeletonLane(0.72f, 10f), skeletonLaneParams(4));
+
+        View nextDivider = new View(this);
+        nextDivider.setBackgroundColor(Tv.STROKE);
+        LinearLayout.LayoutParams dividerLp = new LinearLayout.LayoutParams(
+                Math.max(1, dp(1)), dp(76));
+        dividerLp.leftMargin = dp(18);
+        dividerLp.gravity = Gravity.CENTER_VERTICAL;
+        bodyRow.addView(nextDivider, dividerLp);
+
+        LinearLayout next = new LinearLayout(this);
+        next.setOrientation(LinearLayout.VERTICAL);
+        next.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams nextLp = new LinearLayout.LayoutParams(dp(218),
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        nextLp.leftMargin = dp(18);
+        bodyRow.addView(next, nextLp);
+        next.addView(Skeleton.line(this, 66f, 12f), skeletonEndParams(66, 12, 0));
+        next.addView(Skeleton.line(this, 158f, 16f), skeletonEndParams(158, 16, 6));
+        next.addView(Skeleton.line(this, 92f, 12f), skeletonEndParams(92, 12, 4));
+
+        body.addView(skeletonStateTag());
+
+        return bar;
+    }
+
+    /** The on-air state tag's resting place: top-right, flush with the NEXT column. */
+    private View skeletonStateTag() {
+        View tag = Skeleton.line(this, 42f, 18f);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(42), dp(18),
+                Gravity.TOP | Gravity.END);
+        lp.topMargin = dp(12);
+        lp.rightMargin = dp(24);
+        tag.setLayoutParams(lp);
+        return tag;
+    }
+
+    /** A line that fills {@code fraction} of its lane and leaves the rest empty. */
+    private View skeletonLane(float fraction, float heightDp) {
+        LinearLayout lane = new LinearLayout(this);
+        lane.setOrientation(LinearLayout.HORIZONTAL);
+        lane.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(Math.round(heightDp))));
+        lane.addView(Skeleton.line(this, 0f, heightDp), new LinearLayout.LayoutParams(
+                0, dp(Math.round(heightDp)), fraction));
+        lane.addView(new View(this), new LinearLayout.LayoutParams(0, dp(1), 1f - fraction));
+        return lane;
+    }
+
+    private LinearLayout.LayoutParams skeletonLaneParams(int topMarginDp) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(topMarginDp);
+        return lp;
+    }
+
+    private LinearLayout.LayoutParams skeletonEndParams(int widthDp, int heightDp,
+                                                        int topMarginDp) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(widthDp), dp(heightDp));
+        lp.gravity = Gravity.END;
+        lp.topMargin = dp(topMarginDp);
+        return lp;
     }
 
     // ------------------------------------------------------------------ state
 
     private void updateHeaderDate() {
-        dateLabel.setText(Tv.day(dayStartMs));
+        setTextIfChanged(dateLabel, Tv.day(dayStartMs));
     }
 
     private void updateAccount() {
@@ -549,18 +820,17 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
         detailsRequest++;
 
         if (channel == null) {
-            channelNumber.setText("—");
-            channelName.setText("");
-            channelMeta.setText("");
+            setTextIfChanged(channelNumber, "—");
+            setTextIfChanged(channelName, "");
             channelLogo.setImageDrawable(null);
             stateLabel.setVisibility(View.GONE);
-            titleLabel.setText(R.string.guide_inspector_empty);
-            timeLabel.setText("");
-            descriptionLabel.setText("");
-            nextTitle.setText("");
-            nextTime.setText("");
-            actionHint.setText("");
-            posterNumber.setText("—");
+            stateTag = "";
+            setTextIfChanged(titleLabel, getString(R.string.guide_inspector_empty));
+            setTextIfChanged(timeLabel, "");
+            setTextIfChanged(descriptionLabel, "");
+            setTextIfChanged(nextTitle, "");
+            setTextIfChanged(nextTime, "");
+            setTextIfChanged(posterNumber, "—");
             programmePoster.setVisibility(View.GONE);
             posterFallback.setVisibility(View.VISIBLE);
             setProgressFraction(0f);
@@ -568,24 +838,20 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
         }
 
         long now = System.currentTimeMillis();
-        channelNumber.setText(String.valueOf(channel.number));
-        channelName.setText(channel.title);
-        channelMeta.setText(channelMeta(channel));
+        setTextIfChanged(channelNumber, String.valueOf(channel.number));
+        setTextIfChanged(channelName, channel.title);
         refreshChannelLogo();
-        posterNumber.setText(String.valueOf(channel.number));
+        setTextIfChanged(posterNumber, String.valueOf(channel.number));
 
         stateLabel.setVisibility(View.VISIBLE);
         if (program == null) {
-            stateLabel.setText(R.string.guide_no_programmes);
-            stateLabel.setTextColor(Tv.TEXT_2);
-            stateLabel.setBackgroundResource(R.drawable.bg_chip_quiet);
-            titleLabel.setText(R.string.guide_no_programmes);
-            timeLabel.setText("");
-            descriptionLabel.setText("");
-            nextTitle.setText("—");
-            nextTime.setText("");
-            actionHint.setText(R.string.guide_no_programmes);
-            actionHint.setTextColor(Tv.TEXT_3);
+            setStateChip("none", getString(R.string.guide_no_programmes),
+                    Tv.TEXT_2, R.drawable.bg_chip_quiet);
+            setTextIfChanged(titleLabel, getString(R.string.guide_no_programmes));
+            setTextIfChanged(timeLabel, "");
+            setTextIfChanged(descriptionLabel, "");
+            setTextIfChanged(nextTitle, "—");
+            setTextIfChanged(nextTime, "");
             showPoster("");
             setProgressFraction(0f);
             return;
@@ -594,76 +860,57 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
         boolean live = program.isLive(now);
         boolean past = program.endMs <= now;
         if (live) {
-            stateLabel.setText(R.string.guide_live);
-            stateLabel.setTextColor(0xFFFFFFFF);
-            stateLabel.setBackgroundResource(R.drawable.bg_chip_live);
+            setStateChip("live", getString(R.string.guide_live),
+                    0xFFFFFFFF, R.drawable.bg_chip_live);
         } else if (past) {
-            stateLabel.setText(R.string.guide_ended);
-            stateLabel.setTextColor(Tv.WARNING);
-            stateLabel.setBackgroundResource(R.drawable.bg_chip_catchup);
+            setStateChip("past", getString(R.string.guide_ended),
+                    Tv.WARNING, R.drawable.bg_chip_catchup);
         } else {
-            stateLabel.setText(R.string.guide_soon);
-            stateLabel.setTextColor(Tv.TEXT_2);
-            stateLabel.setBackgroundResource(R.drawable.bg_chip_quiet);
+            setStateChip("soon", getString(R.string.guide_soon),
+                    Tv.TEXT_2, R.drawable.bg_chip_quiet);
         }
 
-        titleLabel.setText(program.title);
-        timeLabel.setText(timeLine(program, live, past, now,
-                program.durationMs()));
-        descriptionLabel.setText(TextUtils.isEmpty(program.description)
+        setTextIfChanged(titleLabel, program.displayTitle(this));
+        setTextIfChanged(timeLabel, timeLine(program, live, past, now,
+                program.durationMs(), ""));
+        setTextIfChanged(descriptionLabel, TextUtils.isEmpty(program.description)
                 ? getString(R.string.guide_no_description) : program.description);
 
         EpgProgram following = channel.nextAfter(program.endMs);
         if (following != null) {
-            nextTitle.setText(following.title);
-            nextTime.setText(clock.format(new Date(following.startMs))
+            setTextIfChanged(nextTitle, following.displayTitle(this));
+            setTextIfChanged(nextTime, clock.format(new Date(following.startMs))
                     + " – " + clock.format(new Date(following.endMs)));
         } else {
-            nextTitle.setText("—");
-            nextTime.setText("");
+            setTextIfChanged(nextTitle, "—");
+            setTextIfChanged(nextTime, "");
         }
 
-        updateAction(channel, program);
         updateProgress(now);
         showPoster("");
         loadDetails(program);
     }
 
-    private String channelMeta(EpgChannel channel) {
-        StringBuilder value = new StringBuilder("KANAL ").append(channel.number);
-        if (!TextUtils.isEmpty(channel.quality)) {
-            value.append(" · ").append(channel.quality);
+    /**
+     * Sets the on-air state tag only when the state actually changes. Re-applying the chip
+     * background on every focus tick re-inflated a drawable and invalidated the whole bar.
+     */
+    private void setStateChip(String tag, String text, int color, int backgroundRes) {
+        if (!tag.equals(stateTag)) {
+            stateTag = tag;
+            stateLabel.setTextColor(color);
+            stateLabel.setBackgroundResource(backgroundRes);
         }
-        if (channel.freeToAir) {
-            value.append(" · BESPLATNO");
-        }
-        return value.toString();
+        setTextIfChanged(stateLabel, text);
     }
 
-    private void updateAction(EpgChannel channel, EpgProgram program) {
-        if (actionHint == null) {
+    /** Avoids a re-layout and a redraw of the on-air bar when the value is unchanged. */
+    private void setTextIfChanged(TextView view, CharSequence value) {
+        if (view == null) {
             return;
         }
-        if (channel == null || program == null) {
-            actionHint.setText("");
-            return;
-        }
-        boolean playable = lineUp.get(channel.number) != null;
-        if (!playable) {
-            actionHint.setText(R.string.error_no_stream);
-            actionHint.setTextColor(Tv.TEXT_3);
-            return;
-        }
-        long now = System.currentTimeMillis();
-        boolean live = program.isLive(now);
-        boolean past = program.endMs <= now;
-        actionHint.setTextColor(Tv.BRAND_BRIGHT);
-        if (live) {
-            actionHint.setText(R.string.guide_live_action);
-        } else if (past && program.canCatchup(now)) {
-            actionHint.setText(R.string.guide_catchup_action);
-        } else {
-            actionHint.setText(R.string.guide_watch_channel_action);
+        if (!TextUtils.equals(view.getText(), value)) {
+            view.setText(value);
         }
     }
 
@@ -692,36 +939,45 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
                 ? focusedDetails.runtimeSeconds * 1000L : program.durationMs();
 
         if (!TextUtils.isEmpty(focusedDetails.description)) {
-            descriptionLabel.setText(focusedDetails.description);
+            setTextIfChanged(descriptionLabel, focusedDetails.description);
         }
-        timeLabel.setText(timeLine(program, live, past, now, runtimeMs));
+        setTextIfChanged(timeLabel, timeLine(program, live, past, now, runtimeMs,
+                focusedDetails.genre));
         if (!TextUtils.isEmpty(focusedDetails.name)
-                && ("Bez naziva".equals(program.title) || TextUtils.isEmpty(program.title))) {
-            titleLabel.setText(focusedDetails.name);
+                && (program.titleMissing || TextUtils.isEmpty(program.title))) {
+            setTextIfChanged(titleLabel, focusedDetails.name);
         }
         showPoster(focusedDetails.posterImageUrl);
     }
 
     private String timeLine(EpgProgram program, boolean live, boolean past, long now,
-                            long runtimeMs) {
+                            long runtimeMs, String genre) {
         StringBuilder value = new StringBuilder();
         value.append(clock.format(new Date(program.startMs)))
                 .append(" – ")
                 .append(clock.format(new Date(program.endMs)));
-        String duration = formatDuration(runtimeMs);
-        if (!duration.isEmpty()) {
-            value.append("   ·   ").append(duration);
-        }
+        // One quiet metadata line: range · genre · duration · remaining. Empty segments
+        // (no genre yet, no runtime) disappear without leaving a stray separator.
+        appendMeta(value, genre);
+        appendMeta(value, formatDuration(runtimeMs));
         if (live) {
             long remaining = Math.max(0L, program.endMs - now);
             if (remaining > 0) {
-                value.append("   ·   još ").append(formatDuration(remaining));
+                appendMeta(value, getString(R.string.guide_remaining_inline,
+                        formatDuration(remaining)));
             }
         } else if (!past) {
-            value.append("   ·   počinje u ")
-                    .append(clock.format(new Date(program.startMs)));
+            appendMeta(value, getString(R.string.guide_starts_at_inline,
+                    clock.format(new Date(program.startMs))));
         }
         return value.toString();
+    }
+
+    private void appendMeta(StringBuilder value, String segment) {
+        if (TextUtils.isEmpty(segment)) {
+            return;
+        }
+        value.append(" · ").append(segment);
     }
 
     private String formatDuration(long ms) {
@@ -730,11 +986,13 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
         }
         long minutes = Math.max(1L, Math.round(ms / 60_000.0));
         if (minutes < 60L) {
-            return minutes + " min";
+            return getString(R.string.duration_minutes, minutes);
         }
         long hours = minutes / 60L;
         long rest = minutes % 60L;
-        return rest == 0L ? hours + " h" : hours + " h " + rest + " min";
+        return rest == 0L
+                ? getString(R.string.duration_hours, hours)
+                : getString(R.string.duration_hours_minutes, hours, rest);
     }
 
     private void showPoster(String url) {
@@ -767,6 +1025,12 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
 
     private void setProgressFraction(float value) {
         float fraction = Math.max(0f, Math.min(1f, value));
+        // Weight changes request a layout of the whole bar; a focus tick that lands on a
+        // programme with the same progress must not trigger one.
+        if (Math.abs(fraction - progressFraction) < 0.0005f) {
+            return;
+        }
+        progressFraction = fraction;
         LinearLayout.LayoutParams fill = (LinearLayout.LayoutParams)
                 progressFill.getLayoutParams();
         fill.weight = fraction;
@@ -783,6 +1047,10 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
         }
         Bitmap bitmap = inspectorLogos != null ? inspectorLogos.get(focusedChannel) : null;
         if (bitmap != null && !bitmap.isRecycled()) {
+            if (channelLogo.getDrawable() instanceof BitmapDrawable
+                    && ((BitmapDrawable) channelLogo.getDrawable()).getBitmap() == bitmap) {
+                return;
+            }
             channelLogo.setImageBitmap(bitmap);
         } else {
             channelLogo.setImageDrawable(null);
@@ -834,10 +1102,6 @@ public final class EpgActivity extends Activity implements EpgGridView.Listener 
             if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_UP
                     && grid.hasFocus() && grid.isTopRowFocused()) {
                 rail.item(TvRail.Tab.GUIDE).requestFocus();
-                return true;
-            }
-            if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && rail.hasFocus()) {
-                grid.requestFocus();
                 return true;
             }
         }

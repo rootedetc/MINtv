@@ -5,8 +5,10 @@ import android.content.Intent;
 
 import local.mintv.ChannelListActivity;
 import local.mintv.EpgActivity;
+import local.mintv.HomeActivity;
 import local.mintv.LoginActivity;
 import local.mintv.R;
+import local.mintv.SearchActivity;
 import local.mintv.SettingsActivity;
 import local.mintv.data.Session;
 
@@ -23,7 +25,13 @@ public final class Shell {
         if (from instanceof EpgActivity && tab == TvRail.Tab.GUIDE) {
             return;
         }
+        if (from instanceof HomeActivity && tab == TvRail.Tab.HOME) {
+            return;
+        }
         if (from instanceof ChannelListActivity && tab == TvRail.Tab.CHANNELS) {
+            return;
+        }
+        if (from instanceof SearchActivity && tab == TvRail.Tab.SEARCH) {
             return;
         }
         if (from instanceof SettingsActivity && tab == TvRail.Tab.SETTINGS) {
@@ -32,8 +40,14 @@ public final class Shell {
 
         Class<?> target;
         switch (tab) {
+            case HOME:
+                target = HomeActivity.class;
+                break;
             case CHANNELS:
                 target = ChannelListActivity.class;
+                break;
+            case SEARCH:
+                target = SearchActivity.class;
                 break;
             case SETTINGS:
                 target = SettingsActivity.class;

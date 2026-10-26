@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The permanent source rail. Stable so a base activity can find it in the decor. -->
+    <item name="rail" type="id" />
+    <!-- One stable id per destination, used by content cards for nextFocusLeft. -->
+    <item name="rail_home" type="id" />
+    <item name="rail_guide" type="id" />
+    <item name="rail_channels" type="id" />
+    <item name="rail_search" type="id" />
+    <item name="rail_settings" type="id" />
+</resources>

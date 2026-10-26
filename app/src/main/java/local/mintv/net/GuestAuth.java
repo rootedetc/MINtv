@@ -68,6 +68,8 @@ public final class GuestAuth {
         headers.put("x-request-tracking-id", trackingId);
         headers.put("x-txn-id", txnId);
         headers.put("x-user-agent", USER_AGENT);
+        headers.put("Device-Name", "web - MINtv");
+        headers.put("Pragma", "akamai-x-cache-on,akamai-x-check-cacheable,akamai-x-get-cache-key");
         headers.put("Accept", "application/json");
         return headers;
     }

@@ -6,7 +6,9 @@
 
     <!-- App shell -->
     <string name="nav_guide">Vodič</string>
+    <string name="nav_home">Početna</string>
     <string name="nav_channels">Kanali</string>
+    <string name="nav_search">Traži</string>
     <string name="nav_settings">Postavke</string>
     <string name="shell_clock_content_description">Trenutno vrijeme %1$s</string>
     <string name="shell_status_offline">Izvan mreže</string>
@@ -35,6 +37,9 @@
     <string name="guide_hint">OK: gledaj   ◀ ▶: vrijeme   ▲ ▼: kanal</string>
     <string name="guide_time_range">%1$s – %2$s</string>
     <string name="guide_duration_min">%1$d min</string>
+    <string name="duration_minutes">%1$d min</string>
+    <string name="duration_hours">%1$d h</string>
+    <string name="duration_hours_minutes">%1$d h %2$d min</string>
     <string name="guide_channel_meta">Kanal %1$d · %2$s</string>
     <string name="guide_now_bubble">%1$s</string>
     <string name="guide_selected_channel">Kanal %1$d</string>
@@ -65,6 +70,16 @@
     <string name="settings_playback_hint">Kvaliteta slike</string>
     <string name="settings_guide_hint">Raspored i predmemorija</string>
     <string name="settings_about_hint">Verzija i privatnost</string>
+    <string name="settings_language">Jezik</string>
+    <string name="settings_language_hint">Jezik sučelja</string>
+    <string name="settings_language_section">Jezik sučelja</string>
+    <string name="settings_language_body">Odaberi jezik cijele aplikacije. MAXtv sadržaj ostaje na hrvatskom.</string>
+    <string name="settings_language_option">Jezik aplikacije</string>
+    <string name="settings_language_note">MAXtv katalog, naslovi i opisi ostaju na hrvatskom.</string>
+    <string name="language_croatian">Hrvatski</string>
+    <string name="language_english">English</string>
+    <string name="language_croatian_body">Cijelo sučelje na hrvatskom.</string>
+    <string name="language_english_body">Cijelo sučelje na engleskom.</string>
     <string name="settings_account_signed_in">Prijavljeni ste</string>
     <string name="settings_account_signed_out">Niste prijavljeni</string>
     <string name="settings_account_body">Prijava je potrebna za kanale uz pretplatu i za gledanje od početka. Besplatni kanali rade bez prijave.</string>
@@ -91,7 +106,7 @@
     <string name="settings_about_privacy">Bez analitike, oglasa i telemetrije.</string>
     <string name="settings_about_vpn">MAXtv ne radi preko VPN-a. Isključi VPN prije gledanja.</string>
     <string name="settings_about_data">Podaci: MAXtv kanali i EPG. Reprodukcija: Media3 i Widevine.</string>
-    <string name="settings_about_demo">Test player</string>
+    <string name="settings_about_demo">Probna reprodukcija</string>
     <string name="settings_about_demo_body">Javni DASH test za provjeru reprodukcije.</string>
     <string name="settings_about_built">Napravljeno za jedno kućanstvo.</string>
 
@@ -160,7 +175,7 @@
     <string name="footer_signed_in">Prijavljen: %1$s</string>
     <string name="action_sign_in">Prijava</string>
     <string name="action_refresh">Osvježi</string>
-    <string name="action_demo">Test player</string>
+    <string name="action_demo">Probna reprodukcija</string>
     <string name="action_retry">Pokušaj ponovno</string>
     <string name="action_epg">Vodič</string>
     <string name="status_loading">Učitavanje kanala…</string>
@@ -168,7 +183,7 @@
     <string name="status_offline_short">Izvan mreže · predmemorija</string>
     <string name="error_title">Kanali nisu dostupni</string>
     <string name="error_message">Provjeri vezu s internetom i pokušaj ponovno.</string>
-    <string name="badge_free">FREE</string>
+    <string name="badge_free">BESPLATNO</string>
     <string name="epg_hint">▲ ▼ ◀ ▶: kretanje · OK: gledaj · BACK: natrag</string>
     <string name="epg_loading">Učitavanje vodiča…</string>
     <string name="epg_no_programmes">Nema podataka o emisijama za ovaj kanal.</string>
@@ -259,6 +274,8 @@
     <string name="guide_catchup_action">OK · GLEDAJ OD POČETKA</string>
     <string name="guide_live_action">OK · GLEDAJ UŽIVO</string>
     <string name="guide_starts_at">POČINJE U %1$s</string>
+    <string name="guide_remaining_inline">još %1$s</string>
+    <string name="guide_starts_at_inline">počinje u %1$s</string>
     <string name="guide_unavailable">NIJE DOSTUPNO OD POČETKA</string>
     <string name="guide_no_description">Nema opisa.</string>
     <string name="guide_channel_meta_quality">KANAL %1$d · %2$s</string>
@@ -297,4 +314,139 @@
     <string name="settings_guide_current_day">Danas</string>
     <string name="settings_about_app">O aplikaciji</string>
     <string name="login_skip">Nastavi bez prijave</string>
+
+    <!-- Home rails -->
+    <string name="home_title">Početna</string>
+    <string name="home_subtitle">Preporuke, nastavak gledanja i tvoja lista</string>
+    <string name="home_show_more">PRIKAŽI VIŠE</string>
+    <string name="home_empty">Nema sadržaja za prikaz.</string>
+    <string name="home_error">Preporuke nisu dostupne</string>
+
+    <!-- Watchlist -->
+    <string name="watchlist_title">Moja lista</string>
+    <string name="watchlist_subtitle">Sadržaji koje si spremio za kasnije</string>
+    <string name="watchlist_manage">Upravljaj</string>
+    <string name="watchlist_done">Gotovo</string>
+    <string name="watchlist_select_all">Sve označi</string>
+    <string name="watchlist_delete_selected">Obriši odabrano</string>
+    <string name="watchlist_delete_count">Obriši odabrano (%1$d)</string>
+    <string name="watchlist_delete_title">Obriši s popisa?</string>
+    <string name="watchlist_delete_body">Ukloniti %1$d odabranih sadržaja s popisa za gledanje?</string>
+    <string name="watchlist_delete_confirm">Obriši</string>
+    <string name="watchlist_empty">Nema sadržaja na popisu za gledanje</string>
+    <string name="watchlist_empty_body">Dodaj film ili seriju iz detalja sadržaja.</string>
+    <string name="watchlist_sign_in">Prijavi se za popis za gledanje.</string>
+    <string name="watchlist_error">Popis se nije mogao učitati.</string>
+    <string name="watchlist_count">%1$d spremljeno</string>
+
+    <!-- Continue watching -->
+    <string name="cw_title">Nastavi gledati</string>
+    <string name="cw_subtitle">Sve što si započeo, na jednom mjestu</string>
+    <string name="cw_empty">Trenutno nema dodanog sadržaja</string>
+    <string name="cw_empty_body">Još uvijek nisi dodao sadržaj u Nastavi gledati. Sav djelomično pogledani sadržaj biti će prikazan ovdje.</string>
+    <string name="cw_sign_in">Prijavi se za nastavak gledanja.</string>
+    <string name="cw_error">Nastavak gledanja nije dostupan.</string>
+    <string name="cw_delete_title">Obriši iz nastavka gledanja?</string>
+    <string name="cw_delete_body">Ukloniti %1$d odabranih sadržaja iz nastavka gledanja?</string>
+    <string name="cw_remaining">Još %1$d min</string>
+
+    <!-- Search -->
+    <string name="search_title">Traži</string>
+    <string name="search_subtitle">Filmovi, serije, osobe i kanali</string>
+    <string name="search_hint">Traži</string>
+    <string name="search_clear">Očisti</string>
+    <string name="search_sign_in">Prijavi se za pretraživanje MAXtv sadržaja.</string>
+    <string name="search_min_length">Upiši barem %1$d znaka.</string>
+    <string name="search_no_results">Nema rezultata pretrage za izraz “%1$s”.</string>
+    <string name="search_no_history">Nema prethodnih pretraga</string>
+    <string name="search_history_hint">Pokušaj pretražiti naziv filma, žanr ili ime glumca.</string>
+    <string name="search_history">Prethodne pretrage</string>
+    <string name="search_history_clear_row">Očisti povijest</string>
+    <string name="search_clear_history">Obriši prethodne pretrage</string>
+    <string name="search_tab_all">Sve</string>
+    <string name="search_tab_movies">Filmovi</string>
+    <string name="search_tab_shows">Serije</string>
+    <string name="search_tab_people">Osobe</string>
+    <string name="search_tab_channels">Kanali</string>
+    <string name="search_tab_streaming">Disney+</string>
+    <string name="search_movies">Filmovi</string>
+    <string name="search_shows">Serije</string>
+    <string name="search_people">Osobe</string>
+    <string name="search_streaming">Dostupno na Disney+</string>
+    <string name="search_channels_header">Kanali</string>
+
+    <!-- Person -->
+    <string name="person_title">Osoba</string>
+    <string name="person_subtitle">Glumci i filmska ekipa</string>
+    <string name="person_empty">Nema sadržaja za ovu osobu.</string>
+    <string name="person_error">Osoba nije dostupna.</string>
+
+    <!-- Details -->
+    <string name="details_title">Detalji</string>
+    <string name="details_subtitle">Opis, glumci i povezani sadržaj</string>
+    <string name="details_error_title">Detalji nisu dostupni</string>
+    <string name="details_error_body">Provjeri vezu i pokušaj ponovno.</string>
+    <string name="details_kind_program">FILM</string>
+    <string name="details_kind_series">SERIJA</string>
+    <string name="details_watch">GLEDAJ</string>
+    <string name="details_resume">NASTAVI GLEDATI</string>
+    <string name="details_watchlist_add">Dodaj u listu</string>
+    <string name="details_watchlist_remove">Ukloni s liste</string>
+    <string name="details_watchlist_added">Sadržaj dodan na popis za gledanje.</string>
+    <string name="details_watchlist_removed">Sadržaj uklonjen s popisa za gledanje.</string>
+    <string name="details_trailer">Najava</string>
+    <string name="details_geo_blocked">Sadržaj nije dostupan u tvojoj zemlji.</string>
+    <string name="details_device_blocked">Sadržaj nije dostupan na ovom uređaju.</string>
+    <string name="details_runtime">Trajanje</string>
+    <string name="details_seasons">Sezone</string>
+    <string name="details_episodes">Epizode</string>
+    <string name="details_episodes_sign_in">Prijavi se za popis epizoda.</string>
+    <string name="details_episodes_empty">Nema epizoda za ovu sezonu.</string>
+    <string name="details_play_episode">GLEDAJ</string>
+    <string name="details_restricted">Ograničeno</string>
+    <string name="details_cast">Glumci i filmska ekipa</string>
+    <string name="details_related">Povezan sadržaj</string>
+    <string name="details_not_signed_in">Prijavi se za gledanje ovog sadržaja.</string>
+    <string name="details_unavailable">Ovaj sadržaj trenutno nije dostupan.</string>
+    <string name="subpage_subtitle">Svi sadržaji u odabranoj kolekciji</string>
+
+    <!-- Channel favourites -->
+    <string name="channel_favourite_accessibility">Omiljeni kanal</string>
+    <string name="channels_filter_favourites">Omiljeni</string>
+    <string name="channels_options">Opcije</string>
+    <string name="channels_options_done">Završi</string>
+    <string name="channels_options_reorder">Uredi redoslijed kanala</string>
+    <string name="channels_options_reset_favourites">Obriši listu omiljenih kanala</string>
+    <string name="channels_options_reset_order">Vrati tvornički redoslijed</string>
+    <string name="channels_reorder_hint">▲ ▼: pomakni kanal   OK: spremi   BACK: odustani</string>
+    <string name="channels_reorder_saving">Spremanje redoslijeda…</string>
+    <string name="channels_reorder_saved">Redoslijed je spremljen.</string>
+    <string name="channels_reorder_failed">Redoslijed nije spremljen. Pokušaj ponovno.</string>
+    <string name="channels_favourites_sign_in">Prijavi se za omiljene kanale.</string>
+    <string name="channels_favourites_loading">Popis omiljenih se učitava…</string>
+    <string name="channels_favourite_not_allowed">Dodavanje ovog kanala u omiljene nije dopušteno.</string>
+    <string name="channels_favourite_added">Kanal je dodan u omiljene.</string>
+    <string name="channels_favourite_removed">Kanal je uklonjen iz omiljenih.</string>
+    <string name="channels_empty_favourites">Nema omiljenih kanala.</string>
+    <string name="channels_reset_favourites_title">Obriši listu omiljenih?</string>
+    <string name="channels_reset_favourites_body">Želiš li obrisati listu omiljenih kanala?</string>
+    <string name="channels_reset_order_title">Tvornički redoslijed?</string>
+    <string name="channels_reset_order_body">Želiš li ponovno postaviti popis kanala?</string>
+    <string name="channels_favourites_cleared">Lista omiljenih je obrisana.</string>
+    <string name="channels_order_reset">Redoslijed je vraćen na tvornički.</string>
+
+    <!-- Model labels shared by cards, details and search -->
+    <string name="meta_minutes">%1$d min</string>
+    <plurals name="meta_seasons_short">
+        <item quantity="one">%1$d sez.</item>
+        <item quantity="few">%1$d sez.</item>
+        <item quantity="other">%1$d sez.</item>
+    </plurals>
+    <string name="season_label">Sezona %1$d</string>
+    <string name="channel_number_fallback">Kanal %1$d</string>
+    <string name="channel_fallback">Kanal</string>
+    <string name="guide_untitled">Bez naziva</string>
+    <string name="badge_on_demand">NA ZAHTJEV</string>
+    <string name="badge_catchup">OD POČETKA</string>
+    <string name="badge_recording">SNIMKA</string>
 </resources>

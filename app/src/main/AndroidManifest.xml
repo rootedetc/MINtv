@@ -55,6 +55,42 @@
         </activity>
 
         <activity
+            android:name=".HomeActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <activity
+            android:name=".SearchActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".WatchlistActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <activity
+            android:name=".ContinueWatchingActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <activity
+            android:name=".ContentDetailActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <activity
+            android:name=".SubpageActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <activity
+            android:name=".PersonActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <activity
             android:name=".PlayerActivity"
             android:configChanges="keyboard|keyboardHidden|navigation"
             android:exported="false"

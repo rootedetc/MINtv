@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home hero: the copy sits on the left, so the artwork dissolves into the ground under it. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="0"
+        android:startColor="#F507080B"
+        android:centerColor="#C407080B"
+        android:endColor="#0007080B" />
+</shape>

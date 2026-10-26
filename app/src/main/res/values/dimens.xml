@@ -25,8 +25,9 @@
 
     <!-- Channels -->
     <dimen name="grid_gap">10dp</dimen>
-    <dimen name="channel_card_height">174dp</dimen>
-    <dimen name="channel_logo_height">104dp</dimen>
+    <dimen name="channel_card_height">152dp</dimen>
+    <dimen name="channel_logo_height">90dp</dimen>
+    <dimen name="channel_fade_height">48dp</dimen>
 
     <!-- Settings -->
     <dimen name="settings_rail_width">236dp</dimen>

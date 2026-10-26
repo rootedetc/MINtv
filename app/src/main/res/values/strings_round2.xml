@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Round 2: sidebar expansion, home hero, player settings, on-air refinements. -->
+    <string name="common_more_info">Više informacija</string>
+    <string name="home_hero_prev">Prethodna preporuka</string>
+    <string name="home_hero_next">Sljedeća preporuka</string>
+    <string name="home_hero_position">%1$d od %2$d</string>
+
+    <string name="player_hint_overlay">OK: pauza · ◀▶: −/+ 10 s · ▼: postavke · BACK: zatvori</string>
+    <string name="player_switcher_hint">▲▼ kanal · OK gledaj · BACK zatvori</string>
+    <string name="player_settings_title">Postavke reprodukcije</string>
+    <string name="player_settings_hint">▲▼ odaberi · ◀▶ promijeni · OK potvrdi · BACK zatvori</string>
+    <string name="player_quality_section">Kvaliteta</string>
+    <string name="player_quality_actual">Trenutno %1$s</string>
+    <string name="player_quality_unknown">—</string>
+    <string name="player_subtitles_section">Titlovi</string>
+    <string name="player_subtitles_off">Isključeni</string>
+    <string name="player_audio_section">Jezik zvuka</string>
+    <string name="player_track_default">Zadano</string>
+    <string name="player_track_none">Nema dostupnih zapisa</string>
+    <string name="player_track_off">Isključeno</string>
+    <string name="player_stream_actual">STREAM</string>
+    <string name="player_subtitles_short">TITL</string>
+    <string name="player_audio_short">ZVUK</string>
+    <string name="player_settings_short">POST.</string>
+</resources>

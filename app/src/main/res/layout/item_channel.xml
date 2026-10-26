@@ -6,7 +6,8 @@
     android:background="@drawable/bg_card"
     android:clickable="true"
     android:focusable="true"
-    android:focusableInTouchMode="false">
+    android:focusableInTouchMode="false"
+    android:foreground="@drawable/bg_card_focus">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -23,31 +24,25 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:contentDescription="@null"
-                android:paddingStart="16dp"
-                android:paddingTop="14dp"
-                android:paddingEnd="16dp"
-                android:paddingBottom="14dp"
+                android:paddingStart="14dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="8dp"
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_channel_placeholder" />
 
-            <TextView
-                android:id="@+id/channel_quality"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="top|end"
+            <ImageView
+                android:id="@+id/channel_favourite"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="top|start"
+                android:layout_marginStart="8dp"
                 android:layout_marginTop="8dp"
-                android:layout_marginEnd="8dp"
                 android:background="@drawable/bg_chip_quiet"
-                android:fontFamily="sans-serif-medium"
-                android:includeFontPadding="false"
-                android:letterSpacing="0.06"
-                android:paddingStart="6dp"
-                android:paddingTop="3dp"
-                android:paddingEnd="6dp"
-                android:paddingBottom="3dp"
-                android:textColor="@color/text_primary"
-                android:textSize="10sp" />
-
+                android:contentDescription="@string/channel_favourite_accessibility"
+                android:padding="4dp"
+                android:src="@drawable/ic_favorite"
+                android:visibility="gone" />
 
         </FrameLayout>
 
@@ -57,7 +52,7 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:paddingStart="12dp"
-            android:paddingTop="8dp"
+            android:paddingTop="7dp"
             android:paddingEnd="12dp"
             android:paddingBottom="0dp">
 
@@ -81,30 +76,42 @@
 
                 <TextView
                     android:id="@+id/channel_title"
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
+                    android:layout_weight="0"
                     android:ellipsize="end"
                     android:fontFamily="sans-serif-medium"
                     android:includeFontPadding="false"
                     android:maxLines="1"
+                    android:maxWidth="108dp"
                     android:textColor="@color/text_primary"
                     android:textSize="15sp" />
 
-                <View
-                    android:id="@+id/channel_free"
-                    android:layout_width="7dp"
-                    android:layout_height="7dp"
-                    android:layout_marginStart="7dp"
-                    android:background="@drawable/bg_free_dot"
+                <TextView
+                    android:id="@+id/channel_quality"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFamily="@font/barlow_condensed_medium"
+                    android:includeFontPadding="false"
+                    android:letterSpacing="0.09"
+                    android:maxLines="1"
+                    android:textAllCaps="true"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="10sp"
                     android:visibility="gone" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
             </LinearLayout>
 
             <TextView
                 android:id="@+id/channel_now"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="3dp"
                 android:ellipsize="end"
                 android:fontFamily="sans-serif"
                 android:includeFontPadding="false"
@@ -122,7 +129,7 @@
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
                 android:layout_height="2dp"
-                android:layout_marginBottom="7dp"
+                android:layout_marginBottom="6dp"
                 android:max="1000"
                 android:progressBackgroundTint="@color/stroke"
                 android:progressTint="@color/brand" />

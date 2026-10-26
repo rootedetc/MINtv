@@ -45,10 +45,9 @@ public final class Tv {
     public static final int DANGER = 0xFFFF6B6B;
 
     private static final DecelerateInterpolator EASE = new DecelerateInterpolator(2.2f);
-    private static final SimpleDateFormat CLOCK =
-            new SimpleDateFormat("HH:mm", Locale.getDefault());
-    private static final SimpleDateFormat DAY =
-            new SimpleDateFormat("EEEE, d. MMMM", Locale.getDefault());
+    private static Locale formatLocale;
+    private static SimpleDateFormat clockFormat;
+    private static SimpleDateFormat dayFormat;
 
     private Tv() {
     }
@@ -61,12 +60,28 @@ public final class Tv {
         return value * context.getResources().getDisplayMetrics().density;
     }
 
+    /**
+     * Formatters are rebuilt when the app language changes, so day and month names
+     * follow the choice made in Settings rather than the locale at class load.
+     */
+    private static void ensureFormats() {
+        Locale locale = Locale.getDefault();
+        if (clockFormat != null && locale.equals(formatLocale)) {
+            return;
+        }
+        formatLocale = locale;
+        clockFormat = new SimpleDateFormat("HH:mm", locale);
+        dayFormat = new SimpleDateFormat("EEEE, d. MMMM", locale);
+    }
+
     public static String clock(long atMs) {
-        return CLOCK.format(new Date(atMs));
+        ensureFormats();
+        return clockFormat.format(new Date(atMs));
     }
 
     public static String day(long atMs) {
-        String value = DAY.format(new Date(atMs));
+        ensureFormats();
+        String value = dayFormat.format(new Date(atMs));
         return value.isEmpty() ? value : Character.toUpperCase(value.charAt(0)) + value.substring(1);
     }
 

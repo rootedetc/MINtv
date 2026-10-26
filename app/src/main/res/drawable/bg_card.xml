@@ -1,12 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Card surface. Focus is a whole-card rule in bg_card_focus, drawn as a foreground,
+     so focusing never changes this fill. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_focused="true">
-        <shape android:shape="rectangle">
-            <solid android:color="@color/surface_focus" />
-            <stroke android:width="2dp" android:color="@color/focus_ring" />
-            <corners android:radius="12dp" />
-        </shape>
-    </item>
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
             <solid android:color="@color/surface_2" />

@@ -9,7 +9,6 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.os.SystemClock;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.util.LruCache;
 import android.util.TypedValue;
 import android.view.KeyEvent;
@@ -133,7 +132,15 @@ public final class EpgGridView extends View {
     private static final int PROGRESS_HEIGHT_DP = 3;
     private static final int PROGRESS_BOTTOM_DP = 5;
 
-    private static final int SCROLL_DURATION_MS = 220;
+    // Baselines measured from the top of the programme block (52 dp row - 2 x 3 dp inset
+    // = 46 dp). Barlow Condensed reports a full 1.0 em ascent, so hanging the time off the
+    // title's descent used to put its baseline at ~37 dp - on top of the 38 dp progress bar.
+    private static final float TITLE_BASELINE_DP = 15f;
+    private static final float TIME_BASELINE_DP = 30f;
+
+    // D-pad focus moves are one short, decisive step: long enough to read as motion,
+    // short enough that repeated presses never feel like they are chasing the ring.
+    private static final int SCROLL_DURATION_MS = 140;
     private static final long LIVE_TICK_MS = 60_000L;
 
     private static final float TITLE_SP = 14f;
@@ -303,7 +310,7 @@ public final class EpgGridView extends View {
             if (!liveUpdates || !isAttachedToWindow()) {
                 return;
             }
-            invalidate();
+            postInvalidateOnAnimation();
             postDelayed(this, LIVE_TICK_MS);
         }
     };
@@ -323,7 +330,7 @@ public final class EpgGridView extends View {
             scrollXPx = scroller.getCurrX();
             scrollYPx = scroller.getCurrY();
             clampScroll();
-            invalidate();
+            postInvalidateOnAnimation();
             postOnAnimation(this);
         }
     };
@@ -388,9 +395,10 @@ public final class EpgGridView extends View {
         logoGapPx = dp(LOGO_GAP_DP);
         titleGapPx = dp(TITLE_GAP_DP);
 
-        titleBaselineOffset = dp(8f) - titlePaint.ascent();
-        timeBaselineOffset = titleBaselineOffset
-                + (titlePaint.descent() - titlePaint.ascent()) + dp(2f) - timePaint.ascent();
+        titleBaselineOffset = dp(TITLE_BASELINE_DP);
+        // Title ink 5.2-17.8 dp, time ink 22.7-32.1 dp, progress bar 38-41 dp: ~5 dp of
+        // air between title and time and ~6 dp between the time and the bar in every cell.
+        timeBaselineOffset = dp(TIME_BASELINE_DP);
         dashHalfWidthPx = dashPaint.measureText(DASH) / 2f;
         dashBaselineOffset = -(dashPaint.ascent() + dashPaint.descent()) / 2f;
 
@@ -479,7 +487,7 @@ public final class EpgGridView extends View {
         if (!channels.isEmpty()) {
             notifyFocusChanged();
         }
-        invalidate();
+        postInvalidateOnAnimation();
     }
 
     public void setListener(Listener listener) {
@@ -491,13 +499,13 @@ public final class EpgGridView extends View {
 
     public void setLogoProvider(LogoProvider provider) {
         this.logoProvider = provider;
-        invalidate();
+        postInvalidateOnAnimation();
     }
 
     /** Local midnight of the displayed day, epoch millis. */
     public void setDayStartMs(long dayStartMs) {
         if (this.dayStartMs == dayStartMs) {
-            invalidate();
+            postInvalidateOnAnimation();
             return;
         }
         this.dayStartMs = dayStartMs;
@@ -509,14 +517,14 @@ public final class EpgGridView extends View {
         clampScroll();
         if (channels.isEmpty()) {
             pendingInitialPosition = true;
-            invalidate();
+            postInvalidateOnAnimation();
             return;
         }
         pendingInitialPosition = true;
         if (gridW > 0 && gridH > 0) {
             positionAtNow(false, true);
         } else {
-            invalidate();
+            postInvalidateOnAnimation();
         }
     }
 
@@ -531,7 +539,7 @@ public final class EpgGridView extends View {
         } else {
             nowOverrideMs = Long.MIN_VALUE;
         }
-        invalidate();
+        postInvalidateOnAnimation();
     }
 
     /** Scroll so that the current time is visible, and focus the channel currently playing if known. */
@@ -595,7 +603,7 @@ public final class EpgGridView extends View {
         textPrimaryColor = textPrimary;
         textDimColor = textDim;
         applyPalette();
-        invalidate();
+        postInvalidateOnAnimation();
     }
 
     // ------------------------------------------------------------------------------------
@@ -678,7 +686,7 @@ public final class EpgGridView extends View {
                 ensureProgramVisible(false, true);
             }
             clampScroll();
-            invalidate();
+            postInvalidateOnAnimation();
         }
     }
 
@@ -746,7 +754,7 @@ public final class EpgGridView extends View {
         dividerColor = blend(backgroundColor, 0xFFFFFFFF, 0.075f);
         gridLineColor = blend(backgroundColor, 0xFFFFFFFF, 0.045f);
         blockFillColor = blend(backgroundColor, surfaceColor, 0.72f);
-        blockLiveFillColor = blend(blockFillColor, accentColor, 0.10f);
+        blockLiveFillColor = blend(blockFillColor, accentColor, 0.12f);
         blockPastFillColor = blend(backgroundColor, surfaceColor, 0.30f);
         blockFocusFillColor = blend(surfaceColor, 0xFFFFFFFF, 0.16f);
         channelFocusFillColor = blend(surfaceColor, 0xFFFFFFFF, 0.08f);
@@ -926,17 +934,31 @@ public final class EpgGridView extends View {
         canvas.drawRoundRect(blockRect, blockRadiusPx, blockRadiusPx, fillPaint);
 
         float textLeft = left + blockTextPadPx;
-        float available = right - textLeft - blockTextPadPx;
+        float textRight = right - blockTextPadPx;
+        // A block that runs past the right edge of the visible window is clipped by the
+        // grid canvas. Ellipsize against the visible part as well, so that the last column
+        // ends with an ellipsis instead of a glyph cut in half by the grid border.
+        float visibleRight = scrollXPx + gridW;
+        if (textRight > visibleRight - dp(4f)) {
+            textRight = visibleRight - dp(4f);
+        }
+        float available = textRight - textLeft;
         if (available > dp(18f)) {
             ProgramText text = programText(program, available);
             titlePaint.setColor(focused ? 0xFFFFFFFF
                     : past ? textPastColor : textPrimaryColor);
             timePaint.setColor(focused ? 0xFFE9D4DF
                     : past ? blend(textPastColor, backgroundColor, 0.2f) : textDimColor);
+            // Canvas text is never allowed outside the block that owns it: the ellipsis
+            // math keeps it inside, the clip guarantees it even if a glyph overhangs its
+            // advance or the font falls back to a wider face.
+            canvas.save();
+            canvas.clipRect(left, top, right, bottom);
             canvas.drawText(text.title, textLeft, top + titleBaselineOffset, titlePaint);
             if (text.timeWidthPx <= available) {
                 canvas.drawText(text.time, textLeft, top + timeBaselineOffset, timePaint);
             }
+            canvas.restore();
         }
 
         if (live && right - left > dp(14f)) {
@@ -1000,12 +1022,19 @@ public final class EpgGridView extends View {
             canvas.drawRect(x, tickTop, x + hairlineWidthPx, rulerHeightPx, hairlinePaint);
             String label = rulerLabels[slot];
             if (label != null) {
-                float labelVisibleX = x - scrollXPx;
+                Paint paint = hour ? rulerPaint : rulerMinorPaint;
+                float labelWidth = paint.measureText(label);
+                // Labels are drawn 6 dp to the right of their tick. A label whose glyphs
+                // would cross either edge of the grid used to show up as a half letter
+                // ("0" at the left, "19:3" at the right); skip it instead. The tick itself
+                // remains, so the ruler still reads correctly.
+                float labelVisibleX = x - scrollXPx + dp(6f);
+                boolean clippedByGrid = labelVisibleX < 0f
+                        || labelVisibleX + labelWidth > gridW;
                 boolean hiddenByNow = hasNow
-                        && labelVisibleX + dp(28f) > nowVisibleLeft
-                        && labelVisibleX < nowVisibleLeft + nowWidth;
-                if (!hiddenByNow) {
-                    Paint paint = hour ? rulerPaint : rulerMinorPaint;
+                        && labelVisibleX < nowVisibleLeft + nowWidth + dp(4f)
+                        && labelVisibleX + labelWidth > nowVisibleLeft - dp(4f);
+                if (!clippedByGrid && !hiddenByNow) {
                     canvas.drawText(label, x + dp(6f), labelBaseline, paint);
                 }
             }
@@ -1067,10 +1096,15 @@ public final class EpgGridView extends View {
         boolean focused = ((int) (rowTop / rowHeightPx)) == focusRow;
         channelNumberPaint.setColor(focused ? accentBrightColor : textDimColor);
 
-        float numberX = cellPadPx + numberColumnPx - text.numberWidthPx;
+        float numberX = Math.max(cellPadPx,
+                cellPadPx + numberColumnPx - text.numberWidthPx);
         float numberBaseline = centerY - (channelNumberPaint.ascent()
                 + channelNumberPaint.descent()) / 2f;
+        canvas.save();
+        canvas.clipRect(cellPadPx, rowTop,
+                cellPadPx + numberColumnPx + dp(1f), rowTop + rowHeightPx);
         canvas.drawText(text.number, numberX, numberBaseline, channelNumberPaint);
+        canvas.restore();
 
         float logoLeft = cellPadPx + numberColumnPx + logoGapPx;
         float logoTop = centerY - logoHeightPx / 2f;
@@ -1096,8 +1130,11 @@ public final class EpgGridView extends View {
         } else {
             float logoBaseline = centerY - (logoNumberPaint.ascent()
                     + logoNumberPaint.descent()) / 2f;
+            canvas.save();
+            canvas.clipRect(rectF);
             canvas.drawText(text.number, rectF.centerX() - text.logoNumberWidthPx,
                     logoBaseline, logoNumberPaint);
+            canvas.restore();
         }
 
         if (text.title.length() > 0) {
@@ -1105,7 +1142,12 @@ public final class EpgGridView extends View {
                     ? 0xFFFFFFFF : textPrimaryColor);
             float titleBaseline = centerY - (channelTitlePaint.ascent()
                     + channelTitlePaint.descent()) / 2f;
+            // Keep the name out of the column hairline even when a glyph overhangs the
+            // width returned by measureText().
+            canvas.save();
+            canvas.clipRect(titleLeft, rowTop, titleLeft + titleWidth, rowTop + rowHeightPx);
             canvas.drawText(text.title, titleLeft, titleBaseline, channelTitlePaint);
+            canvas.restore();
         }
     }
 
@@ -1155,7 +1197,7 @@ public final class EpgGridView extends View {
         if (cached != null && Math.abs(cached.maxWidth - maxWidth) < 1f) {
             return cached;
         }
-        String raw = program.title == null ? "" : program.title
+        String raw = program.displayTitle(getContext())
                 .replace('\n', ' ').replace('\r', ' ').trim();
         String title = ellipsize(titlePaint, raw, maxWidth);
         String time = timeFormatter.format(new Date(program.startMs))
@@ -1385,8 +1427,6 @@ public final class EpgGridView extends View {
         if (channels.isEmpty()) {
             return;
         }
-        int oldRow = focusRow;
-        int oldScrollX = scrollXPx;
 
         if (!verticalAnchorValid) {
             EpgProgram focused = focusedProgram();
@@ -1402,10 +1442,6 @@ public final class EpgGridView extends View {
             setFocus(row, nearestIndexAt(channels.get(row), anchor), true);
         }
         ensureRowVisible(true);
-
-        Log.d("EpgNav", (delta < 0 ? "UP " : "DOWN ") + oldRow + "->" + focusRow
-                + " anchor=" + timeFormatter.format(new Date(anchor))
-                + " scrollX=" + oldScrollX + "->" + scrollXPx);
     }
 
     /**
@@ -1549,7 +1585,7 @@ public final class EpgGridView extends View {
 
         if (gridW <= 0 || gridH <= 0) {
             pendingInitialPosition = true;
-            invalidate();
+            postInvalidateOnAnimation();
             return;
         }
 
@@ -1558,10 +1594,10 @@ public final class EpgGridView extends View {
         int targetX = Math.round((clampedNow - dayStartMs) * pxPerMs) - gridW / 3;
         int targetY = row * rowHeightPx - (gridH - rowHeightPx) / 2;
         setScrollImmediate(targetX, targetY);
-        invalidate();
     }
 
     private void setFocus(int row, int programIndex, boolean notify) {
+        int oldRow = focusRow;
         boolean changed = row != focusRow || programIndex != focusProgramIndex;
         focusRow = row;
         focusProgramIndex = programIndex;
@@ -1569,8 +1605,49 @@ public final class EpgGridView extends View {
             if (notify) {
                 notifyFocusChanged();
             }
-            invalidate();
+            // Horizontal moves repaint only the row bands; a vertical move can leave a
+            // stale ring in the row that lost focus because the two rows are separated
+            // by scroll bands, so repaint the canvas once in that case.
+            if (oldRow != row) {
+                postInvalidateOnAnimation();
+            } else {
+                invalidateFocusRows(oldRow, row);
+            }
         }
+    }
+
+    /**
+     * Repaints just the two row bands affected by a focus move. The channel cell and every
+     * programme block live inside their own 52 dp row, so no other pixels change. Falls back
+     * to a full animation-frame invalidation when the view has no geometry yet.
+     */
+    private void invalidateFocusRows(int oldRow, int newRow) {
+        if (rowHeightPx <= 0 || getWidth() <= 0 || getHeight() <= 0) {
+            postInvalidateOnAnimation();
+            return;
+        }
+        int gridTop = getPaddingTop() + rulerHeightPx;
+        int gridBottom = getHeight() - getPaddingBottom();
+        int top = Integer.MAX_VALUE;
+        int bottom = Integer.MIN_VALUE;
+        for (int pass = 0; pass < 2; pass++) {
+            int row = pass == 0 ? oldRow : newRow;
+            if (row < 0) {
+                continue;
+            }
+            int rowTop = gridTop + row * rowHeightPx - scrollYPx;
+            int rowBottom = rowTop + rowHeightPx;
+            if (rowBottom <= gridTop || rowTop >= gridBottom) {
+                continue;
+            }
+            top = Math.min(top, Math.max(rowTop, gridTop));
+            bottom = Math.max(bottom, Math.min(rowBottom, gridBottom));
+        }
+        if (top >= bottom) {
+            postInvalidateOnAnimation();
+            return;
+        }
+        postInvalidateOnAnimation(0, top, getWidth(), bottom);
     }
 
     private void notifyFocusChanged() {
@@ -1586,7 +1663,7 @@ public final class EpgGridView extends View {
         StringBuilder description = new StringBuilder(64);
         description.append(channel.number).append(' ').append(channel.title);
         if (program != null) {
-            description.append(", ").append(program.title);
+            description.append(", ").append(program.displayTitle(getContext()));
         }
         setContentDescription(description.toString());
     }
@@ -1647,7 +1724,7 @@ public final class EpgGridView extends View {
         }
         scrollXPx = clampedX;
         scrollYPx = clampedY;
-        invalidate();
+        postInvalidateOnAnimation();
     }
 
     private void postScrollTicker() {
@@ -1666,7 +1743,7 @@ public final class EpgGridView extends View {
         if (!userTouching && !verticalAnchorValid) {
             ensureProgramVisible(true, true);
         }
-        invalidate();
+        postInvalidateOnAnimation();
     }
 
     @Override
@@ -1676,7 +1753,7 @@ public final class EpgGridView extends View {
             verticalAnchorValid = false;
             setFocus(0, indexAt(channels.get(0), currentNowMs()), true);
         }
-        invalidate();
+        postInvalidateOnAnimation();
     }
 
     @Override
@@ -1691,7 +1768,7 @@ public final class EpgGridView extends View {
             zoneId = zone;
             rebuildRulerLabels();
             programTexts.evictAll();
-            invalidate();
+            postInvalidateOnAnimation();
         }
     }
 
@@ -1762,7 +1839,7 @@ public final class EpgGridView extends View {
                     if (dx != 0 || dy != 0) {
                         scrollXPx = clampX(scrollXPx + dx);
                         scrollYPx = clampY(scrollYPx + dy);
-                        invalidate();
+                        postInvalidateOnAnimation();
                     }
                     lastTouchX = x;
                     lastTouchY = y;

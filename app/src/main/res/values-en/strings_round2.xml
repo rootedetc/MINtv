@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Round 2: sidebar expansion, home hero, player settings, on-air refinements. -->
+    <string name="common_more_info">More info</string>
+    <string name="home_hero_prev">Previous recommendation</string>
+    <string name="home_hero_next">Next recommendation</string>
+    <string name="home_hero_position">%1$d of %2$d</string>
+
+    <string name="player_hint_overlay">OK: pause · ◀▶: −/+ 10 s · ▼: settings · BACK: close</string>
+    <string name="player_switcher_hint">▲▼ channel · OK watch · BACK close</string>
+    <string name="player_settings_title">Playback settings</string>
+    <string name="player_settings_hint">▲▼ select · ◀▶ change · OK confirm · BACK close</string>
+    <string name="player_quality_section">Quality</string>
+    <string name="player_quality_actual">Now %1$s</string>
+    <string name="player_quality_unknown">—</string>
+    <string name="player_subtitles_section">Subtitles</string>
+    <string name="player_subtitles_off">Off</string>
+    <string name="player_audio_section">Audio language</string>
+    <string name="player_track_default">Default</string>
+    <string name="player_track_none">No tracks available</string>
+    <string name="player_track_off">Off</string>
+    <string name="player_stream_actual">STREAM</string>
+    <string name="player_subtitles_short">SUB</string>
+    <string name="player_audio_short">AUDIO</string>
+    <string name="player_settings_short">SETTINGS</string>
+</resources>

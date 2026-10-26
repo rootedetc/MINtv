@@ -133,6 +133,24 @@ public final class PlaybackApi {
         run(() -> doResolveCatchup(channel, program, true), callback);
     }
 
+    /**
+     * VOD playback: {@code /player/playinfo/program?program_id&video_id} -> {@code /media}.
+     * This is the path used by home rails, search results and details watch actions.
+     */
+    public void resolveProgram(String programId, String mediaId, Callback callback) {
+        run(() -> doResolveProgram(programId, mediaId), callback);
+    }
+
+    /**
+     * Catch-up playback when only the details action/bookmark fields are known (no EPG row):
+     * {@code /player/playinfo/catchup?program_id&station_id&start_time&end_time}.
+     */
+    public void resolveCatchup(String programId, String stationId, long startMs, long endMs,
+                               int channelNumber, String listingGuid, Callback callback) {
+        run(() -> doResolveCatchup(programId, stationId, startMs, endMs, channelNumber,
+                listingGuid), callback);
+    }
+
     private void run(Task task, Callback callback) {
         io.execute(() -> {
             try {
@@ -283,6 +301,98 @@ public final class PlaybackApi {
             contentType = type;
         }
         return fetchPlayback(mediaId, contentType, token);
+    }
+
+    /**
+     * VOD selector. The web client sends {@code video_id} = the action's {@code media_id}.
+     */
+    private Playback doResolveProgram(String programId, String mediaId) throws ApiException {
+        Session session = Session.get(appContext);
+        String token = session.accessToken();
+        if (token.isEmpty()) {
+            throw new ApiException(ApiException.AUTH, "not signed in");
+        }
+        if (programId == null || programId.isEmpty()) {
+            throw new ApiException(ApiException.PARSE, "Nema identifikatora sadržaja.");
+        }
+        HttpUrl.Builder url = url("/player/playinfo/program")
+                .addQueryParameter("program_id", programId)
+                .addQueryParameter("natco_key", GuestAuth.NATCO_KEY)
+                .addQueryParameter("device_type", "WEB")
+                .addQueryParameter("app_language", GuestAuth.APP_LANGUAGE)
+                .addQueryParameter("natco_code", GuestAuth.NATCO_CODE);
+        if (mediaId != null && !mediaId.isEmpty()) {
+            url.addQueryParameter("video_id", mediaId);
+        }
+        JSONObject response = getDetailed(url.build(), token);
+        JSONObject data = response.optJSONObject("data");
+        JSONObject info = data == null ? null : data.optJSONObject("playBackInfoResponse");
+        if (info == null) {
+            throw new ApiException(ApiException.SERVER, serverMessage(response));
+        }
+        String type = info.optString("type", "vod");
+        String media = firstServiceMediaId(info);
+        if (media.isEmpty()) {
+            media = mediaId == null ? "" : mediaId;
+        }
+        if (media.isEmpty()) {
+            throw new ApiException(ApiException.PARSE, "Nema media id za sadržaj.");
+        }
+        String contentType = "vod".equalsIgnoreCase(type)
+                ? info.optString("content_type", type) : type;
+        if (contentType == null || contentType.isEmpty()) {
+            contentType = type;
+        }
+        return fetchPlayback(media, contentType, token);
+    }
+
+    /** Explicit catch-up fields, used by details actions and Continue Watching tiles. */
+    private Playback doResolveCatchup(String programId, String stationId, long startMs,
+                                      long endMs, int channelNumber, String listingGuid)
+            throws ApiException {
+        Session session = Session.get(appContext);
+        String token = session.accessToken();
+        if (token.isEmpty()) {
+            throw new ApiException(ApiException.AUTH, "not signed in");
+        }
+        if (programId == null || programId.isEmpty() || stationId == null
+                || stationId.isEmpty() || startMs <= 0 || endMs <= startMs) {
+            throw new ApiException(ApiException.SERVER, MSG_NOT_CATCHUP);
+        }
+        HttpUrl.Builder url = url("/player/playinfo/catchup")
+                .addQueryParameter("program_id", programId)
+                .addQueryParameter("natco_key", GuestAuth.NATCO_KEY)
+                .addQueryParameter("device_type", "WEB")
+                .addQueryParameter("station_id", stationId)
+                .addQueryParameter("start_time", wireTime(startMs))
+                .addQueryParameter("end_time", wireTime(endMs));
+        if (channelNumber > 0) {
+            url.addQueryParameter("channel_number", Integer.toString(channelNumber));
+        }
+        if (listingGuid != null && !listingGuid.isEmpty()) {
+            url.addQueryParameter("listing_guid", listingGuid);
+        }
+        url.addQueryParameter("app_language", GuestAuth.APP_LANGUAGE)
+                .addQueryParameter("natco_code", GuestAuth.NATCO_CODE);
+        JSONObject response;
+        try {
+            response = getDetailed(url.build(), token);
+        } catch (ApiException e) {
+            throw catchupFailure(e, MSG_NOT_CATCHUP);
+        }
+        JSONObject data = response.optJSONObject("data");
+        JSONObject info = data == null ? null : data.optJSONObject("playBackInfoResponse");
+        if (info == null) {
+            throw new ApiException(ApiException.SERVER, MSG_NOT_CATCHUP);
+        }
+        String type = info.optString("type", "catchup");
+        String media = firstServiceMediaId(info);
+        if (media.isEmpty()) {
+            throw new ApiException(ApiException.SERVER, MSG_NOT_CATCHUP);
+        }
+        String contentType = "vod".equalsIgnoreCase(type)
+                ? info.optString("content_type", type) : type;
+        return fetchPlayback(media, contentType, token);
     }
 
     /**

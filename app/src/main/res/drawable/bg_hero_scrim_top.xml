@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hero artwork: opaque at the very top so a light design band in the CMS asset
+     disappears into the ground, then a soft fade so the photograph keeps its depth. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#FF07080B"
+        android:centerColor="#B307080B"
+        android:endColor="#0007080B" />
+</shape>

@@ -71,6 +71,7 @@ public final class ChannelRepository {
 
     private final Context appContext;
     private final SharedPreferences prefs;
+    private volatile List<Channel> lastDelivered = Collections.emptyList();
     private final ExecutorService io = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "channel-repo");
         thread.setDaemon(true);
@@ -100,6 +101,7 @@ public final class ChannelRepository {
         io.execute(() -> {
             List<Channel> cached = readCache();
             if (!cached.isEmpty()) {
+                lastDelivered = cached;
                 mainHandler.post(() -> listener.onChannels(cached, true));
             }
             long fetchedAt = prefs.getLong(KEY_FETCHED_AT, 0);
@@ -141,6 +143,7 @@ public final class ChannelRepository {
                     .putString(KEY_JSON, json)
                     .putLong(KEY_FETCHED_AT, System.currentTimeMillis())
                     .apply();
+            lastDelivered = channels;
             mainHandler.post(() -> listener.onChannels(channels, false));
         } catch (IOException e) {
             mainHandler.post(() -> listener.onError("Mreža nije dostupna.", e));
@@ -203,6 +206,11 @@ public final class ChannelRepository {
 
     public long lastFetchedAt() {
         return prefs.getLong(KEY_FETCHED_AT, 0);
+    }
+
+    /** Last line-up delivered by this process, empty before the first load. */
+    public List<Channel> cachedChannels() {
+        return lastDelivered;
     }
 
     public void clearCache() {

@@ -1,6 +1,11 @@
 package local.mintv.data;
 
+import android.content.Context;
+
+import org.json.JSONArray;
 import org.json.JSONObject;
+
+import local.mintv.R;
 
 /**
  * One linear channel as returned by the public MAXtv EPG endpoint.
@@ -12,11 +17,15 @@ import org.json.JSONObject;
 public final class Channel {
 
     private final int number;
+    private final int channelId;
     private final String stationId;
     private final String title;
+    private final boolean syntheticTitle;
     private final String logoUrl;
     private final String quality;
     private final boolean freeToAir;
+    private final String type;
+    private final boolean hasDvb;
     private final String dashUrl;
     private final String hlsUrl;
     private final String pidDash;
@@ -24,22 +33,30 @@ public final class Channel {
     private final String mediaPid;
 
     private Channel(int number,
+                    int channelId,
                     String stationId,
                     String title,
+                    boolean syntheticTitle,
                     String logoUrl,
                     String quality,
                     boolean freeToAir,
+                    String type,
+                    boolean hasDvb,
                     String dashUrl,
                     String hlsUrl,
                     String pidDash,
                     String pidHls,
                     String mediaPid) {
         this.number = number;
+        this.channelId = channelId;
         this.stationId = stationId;
         this.title = title;
+        this.syntheticTitle = syntheticTitle;
         this.logoUrl = logoUrl;
         this.quality = quality;
         this.freeToAir = freeToAir;
+        this.type = type;
+        this.hasDvb = hasDvb;
         this.dashUrl = dashUrl;
         this.hlsUrl = hlsUrl;
         this.pidDash = pidDash;
@@ -63,21 +80,48 @@ public final class Channel {
             }
         }
         String title = clean(json.optString("title", ""));
-        if (title.isEmpty()) {
+        boolean syntheticTitle = title.isEmpty();
+        if (syntheticTitle) {
             title = number >= 0 ? "Kanal " + number : "Kanal";
         }
+        int channelId = json.optInt("channel_id", number);
+        if (channelId < 0) {
+            channelId = number;
+        }
+        String type = clean(json.optString("type", "linear"));
+        if (type.isEmpty()) {
+            type = "linear";
+        }
+        boolean hasDvb = !clean(json.optString("dvb_url", "")).isEmpty()
+                || hasDistribution(json.optJSONArray("distribution_types"), "dvb-t");
         return new Channel(
                 number,
+                channelId,
                 clean(json.optString("station_id", "")),
                 title,
+                syntheticTitle,
                 clean(json.optString("channel_logo", "")),
                 clean(json.optString("quality", "")),
                 json.optBoolean("is_free_to_air", false),
+                type,
+                hasDvb,
                 clean(json.optString("video_src_dash", "")),
                 clean(json.optString("video_src_m3u", "")),
                 clean(json.optString("pid_dash", "")),
                 clean(json.optString("pid_m3u", "")),
                 clean(json.optString("media_pid", "")));
+    }
+
+    private static boolean hasDistribution(JSONArray array, String value) {
+        if (array == null) {
+            return false;
+        }
+        for (int i = 0; i < array.length(); i++) {
+            if (value.equalsIgnoreCase(clean(array.optString(i, "")))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String clean(String value) {
@@ -93,12 +137,27 @@ public final class Channel {
         return number;
     }
 
+    /** Order key for {@code /epg/channel/order}. */
+    public int getChannelId() {
+        return channelId;
+    }
+
     public String getStationId() {
         return stationId;
     }
 
     public String getTitle() {
         return title;
+    }
+
+    /** Localized name for channels whose payload carried no title. */
+    public String getTitle(Context context) {
+        if (!syntheticTitle) {
+            return title;
+        }
+        return number >= 0
+                ? context.getString(R.string.channel_number_fallback, number)
+                : context.getString(R.string.channel_fallback);
     }
 
     public String getLogoUrl() {
@@ -111,6 +170,28 @@ public final class Channel {
 
     public boolean isFreeToAir() {
         return freeToAir;
+    }
+
+    /** {@code linear}, {@code virtual} or {@code synthetic}. */
+    public String getType() {
+        return type;
+    }
+
+    public boolean isVirtual() {
+        return "virtual".equalsIgnoreCase(type);
+    }
+
+    public boolean isSynthetic() {
+        return "synthetic".equalsIgnoreCase(type);
+    }
+
+    /** DVB channels cannot be reordered in the custom channel list. */
+    public boolean hasDvb() {
+        return hasDvb;
+    }
+
+    public boolean isReorderable() {
+        return !hasDvb() && !isSynthetic();
     }
 
     /** Clear or DRM-protected DASH manifest. Passed to {@code PlayerActivity} as-is. */
