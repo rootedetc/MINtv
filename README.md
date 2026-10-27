@@ -11,6 +11,22 @@ channels, the guide, the catalogue and the player.
 > DRM is never circumvented: licences are requested from the official server with the
 > signed-in user's own session.
 
+## About the service
+
+MAXtv is not a bespoke Hrvatski Telekom product. The app and the streaming stack behind it are
+a re-licensed build of a white-label TV platform: the supplier sells the same client, BFF,
+guide, entitlements and player to a number of other operators, who re-brand it and plug in
+their own channels and content deals. Only the branding and the catalogue differ — the
+behaviour and the API shape are the same everywhere.
+
+The shared origins are visible in the endpoints this repo talks to:
+
+- `tv-hr-prod.yo-digital.com/hr-bifrost` — the BFF (home rails, search, details, EPG)
+- `gateway-hr-proxy.tv.yo-digital.com/hr-idm` — sign-in and session
+- `widevine.entitlement.theplatform.eu` — Widevine licences, via Comcast's `theplatform`
+
+MINtv is an independent client for that same public service, not a copy of HT's app.
+
 ## Screens
 
 | Guide (EPG) | Channels |
