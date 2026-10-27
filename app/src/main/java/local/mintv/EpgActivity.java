@@ -21,12 +21,16 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
+import local.mintv.data.AccountChannelRepository;
 import local.mintv.data.Channel;
 import local.mintv.data.ChannelRepository;
+import local.mintv.data.ChannelSubscriptions;
 import local.mintv.data.Session;
 import local.mintv.epg.EpgCache;
 import local.mintv.epg.EpgChannel;
@@ -35,6 +39,8 @@ import local.mintv.epg.EpgProgram;
 import local.mintv.epg.EpgProgramDetails;
 import local.mintv.epg.EpgRepository;
 import local.mintv.epg.ProgramDetailsRepository;
+import local.mintv.net.ApiException;
+import local.mintv.net.Background;
 import local.mintv.player.PlaybackLauncher;
 import local.mintv.ui.EpgLogoLoader;
 import local.mintv.ui.ImageLoader;
@@ -53,6 +59,7 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
     private EpgGridView grid;
     private TvRail rail;
     private EpgRepository epgRepository;
+    private AccountChannelRepository accountRepository;
     private EpgLogoLoader epgLogos;
     private EpgLogoLoader inspectorLogos;
 
@@ -70,6 +77,7 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
     private TextView channelNumber;
     private TextView channelName;
     private ImageView channelLogo;
+    private ImageView channelLock;
     private ImageView programmePoster;
     private View posterFallback;
     private TextView posterNumber;
@@ -83,6 +91,9 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
     private static final int ON_AIR_POSTER_HEIGHT_DP = 112;
 
     private final Map<Integer, Channel> lineUp = new HashMap<>();
+    private final Set<Integer> subscriptions = new HashSet<>();
+    private boolean subscriptionsKnown;
+    private boolean subscriptionsLoading;
     private final SimpleDateFormat clock =
             new SimpleDateFormat("HH:mm", Locale.getDefault());
     private final SimpleDateFormat iso =
@@ -129,6 +140,7 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
         inspectorLogos = new EpgLogoLoader(this, this::refreshChannelLogo, dp(72), dp(44));
 
         epgRepository = new EpgRepository(this);
+        accountRepository = new AccountChannelRepository(this);
         dayStartMs = localMidnight(System.currentTimeMillis());
         grid.setDayStartMs(dayStartMs);
         grid.setNowMs(System.currentTimeMillis());
@@ -150,6 +162,7 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
         });
 
         loadGuide(false);
+        loadSubscriptions();
         rail.setContentFocusTarget(grid);
         grid.requestFocus();
     }
@@ -159,6 +172,13 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
         super.onResume();
         updateAccount();
         updateHeaderDate();
+        if (!subscriptionsKnown && !subscriptionsLoading
+                && Session.get(this).isLoggedIn()) {
+            loadSubscriptions();
+        } else if (subscriptionsKnown && !Session.get(this).isLoggedIn()) {
+            ChannelSubscriptions.clear();
+            applySubscriptions(null);
+        }
         handler.removeCallbacks(progressTick);
         handler.post(progressTick);
         if (inspectorLogos != null) {
@@ -234,6 +254,60 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
         } else if (!channels.isEmpty()) {
             updateInspector(channels.get(0), channels.get(0).programAt(now));
         }
+    }
+
+    /**
+     * Loads the account's subscribed channel numbers once. Until this succeeds the guide
+     * shows no lock markers rather than guessing that every premium channel is locked.
+     */
+    private void loadSubscriptions() {
+        if (subscriptionsLoading || !Session.get(this).isLoggedIn()) {
+            return;
+        }
+        // Paint the last known snapshot immediately, then refresh it. A failed refresh
+        // keeps the snapshot rather than turning every premium channel unlocked.
+        Set<Integer> cached = ChannelSubscriptions.current(this);
+        if (cached != null) {
+            applySubscriptions(cached);
+        }
+        subscriptionsLoading = true;
+        Background.run(() -> accountRepository.subscribedNumbers(),
+                new Background.Result<Set<Integer>>() {
+                    @Override
+                    public void onSuccess(Set<Integer> numbers) {
+                        subscriptionsLoading = false;
+                        ChannelSubscriptions.publish(EpgActivity.this, numbers);
+                        // publish() refuses when the session vanished mid-fetch; mirror the
+                        // cached state so the marker and the click guard never disagree.
+                        applySubscriptions(ChannelSubscriptions.current(EpgActivity.this));
+                    }
+
+                    @Override
+                    public void onError(ApiException error) {
+                        subscriptionsLoading = false;
+                        if (!subscriptionsKnown) {
+                            applySubscriptions(null);
+                        }
+                    }
+                });
+    }
+
+    private void applySubscriptions(Set<Integer> numbers) {
+        subscriptionsKnown = numbers != null;
+        subscriptions.clear();
+        if (numbers != null) {
+            subscriptions.addAll(numbers);
+        }
+        grid.setSubscriptionState(subscriptions, subscriptionsKnown);
+        if (focusedChannel != null) {
+            updateInspector(focusedChannel, focusedProgram);
+        }
+    }
+
+    private boolean isLocked(EpgChannel channel) {
+        return subscriptionsKnown && Session.get(this).isLoggedIn()
+                && channel != null && !channel.freeToAir
+                && !subscriptions.contains(channel.number);
     }
 
     private EpgChannel firstUsefulChannel(List<EpgChannel> channels, long now) {
@@ -464,6 +538,15 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
         channelNames.addView(channelName);
         channelRow.addView(channelNames, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        channelLock = new ImageView(this);
+        channelLock.setImageResource(R.drawable.ic_lock);
+        channelLock.setColorFilter(Tv.TEXT_2);
+        channelLock.setContentDescription(getString(R.string.channels_locked));
+        channelLock.setVisibility(View.GONE);
+        LinearLayout.LayoutParams lockLp = new LinearLayout.LayoutParams(dp(18), dp(18));
+        lockLp.leftMargin = dp(8);
+        channelRow.addView(channelLock, lockLp);
 
         info.addView(channelRow);
 
@@ -824,6 +907,7 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
             setTextIfChanged(channelNumber, "—");
             setTextIfChanged(channelName, "");
             channelLogo.setImageDrawable(null);
+            channelLock.setVisibility(View.GONE);
             stateLabel.setVisibility(View.GONE);
             stateTag = "";
             setTextIfChanged(titleLabel, getString(R.string.guide_inspector_empty));
@@ -839,8 +923,10 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
         }
 
         long now = System.currentTimeMillis();
+        boolean locked = isLocked(channel);
         setTextIfChanged(channelNumber, String.valueOf(channel.number));
         setTextIfChanged(channelName, channel.title);
+        channelLock.setVisibility(locked ? View.VISIBLE : View.GONE);
         refreshChannelLogo();
         setTextIfChanged(posterNumber, String.valueOf(channel.number));
 
@@ -849,7 +935,8 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
             setStateChip("none", getString(R.string.guide_no_programmes),
                     Tv.TEXT_2, R.drawable.bg_chip_quiet);
             setTextIfChanged(titleLabel, getString(R.string.guide_no_programmes));
-            setTextIfChanged(timeLabel, "");
+            setTextIfChanged(timeLabel, locked
+                    ? getString(R.string.channels_locked) : "");
             setTextIfChanged(descriptionLabel, "");
             setTextIfChanged(nextTitle, "—");
             setTextIfChanged(nextTime, "");
@@ -873,7 +960,7 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
 
         setTextIfChanged(titleLabel, program.displayTitle(this));
         setTextIfChanged(timeLabel, timeLine(program, live, past, now,
-                program.durationMs(), ""));
+                program.durationMs(), "", locked));
         setTextIfChanged(descriptionLabel, TextUtils.isEmpty(program.description)
                 ? getString(R.string.guide_no_description) : program.description);
 
@@ -943,7 +1030,7 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
             setTextIfChanged(descriptionLabel, focusedDetails.description);
         }
         setTextIfChanged(timeLabel, timeLine(program, live, past, now, runtimeMs,
-                focusedDetails.genre));
+                focusedDetails.genre, isLocked(focusedChannel)));
         if (!TextUtils.isEmpty(focusedDetails.name)
                 && (program.titleMissing || TextUtils.isEmpty(program.title))) {
             setTextIfChanged(titleLabel, focusedDetails.name);
@@ -952,13 +1039,16 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
     }
 
     private String timeLine(EpgProgram program, boolean live, boolean past, long now,
-                            long runtimeMs, String genre) {
+                            long runtimeMs, String genre, boolean locked) {
         StringBuilder value = new StringBuilder();
         value.append(clock.format(new Date(program.startMs)))
                 .append(" – ")
                 .append(clock.format(new Date(program.endMs)));
-        // One quiet metadata line: range · genre · duration · remaining. Empty segments
-        // (no genre yet, no runtime) disappear without leaving a stray separator.
+        // One quiet metadata line: range · access · genre · duration · remaining. Empty
+        // segments (no genre yet, no runtime) disappear without leaving a stray separator.
+        if (locked) {
+            appendMeta(value, getString(R.string.channels_locked));
+        }
         appendMeta(value, genre);
         appendMeta(value, formatDuration(runtimeMs));
         if (live) {
@@ -1068,6 +1158,10 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
     @Override
     public void onProgramSelected(EpgChannel channel, EpgProgram program) {
         if (channel == null) {
+            return;
+        }
+        if (isLocked(channel)) {
+            PlaybackLauncher.showLocked(this);
             return;
         }
         Channel playable = lineUp.get(channel.number);

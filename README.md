@@ -56,9 +56,11 @@ and the MAXtv catalogue text left in Croatian, as the service returns it.</sub>
 - **Content details** — programme and series metadata, actions, seasons and episodes, cast
   and related content, all reachable from the rails, search and the guide.
 - **Guide (EPG)** — a TiviMate-style grid: 247 channels, a full day of programmes, day ruler,
-  now line, progress on the current show, and channel logos.
-- **Channels** — favourites, a free-to-air filter, HD filter, custom channel order and a reset
-  to the broadcast order.
+  now line, progress on the current show, channel logos, and a lock on channels outside the
+  signed-in account's subscription.
+- **Channels** — favourites, a free-to-air filter, HD filter, custom channel order, a reset
+  to the broadcast order, and the same subscription lock on every channel the account cannot
+  watch.
 - **Hrvatski / English UI** — choose the app language in Settings; the catalogue text stays as
   the service returns it.
 
@@ -124,8 +126,15 @@ For day-to-day work, `./gradlew assembleDebug` and `adb install -r app/build/out
 
 ## Docs
 
+- [`CHANGELOG.md`](CHANGELOG.md) — releases and notable changes.
 - [`DESIGN.md`](DESIGN.md) — the visual system: typography, spacing, focus and state rules.
 - [`PRODUCT.md`](PRODUCT.md) — scope, surfaces and the decisions behind them.
+
+## Releases
+
+Prebuilt universal APKs are published on the GitHub
+[Releases](https://github.com/rootedetc/MINtv/releases) page. The APK contains no native
+libraries, so one file covers arm64-v8a, armeabi-v7a, x86 and x86_64 Android TV devices.
 
 ## Notes
 

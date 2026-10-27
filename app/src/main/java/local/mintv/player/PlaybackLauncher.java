@@ -1,6 +1,7 @@
 package local.mintv.player;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.widget.Toast;
 
@@ -13,6 +14,7 @@ import local.mintv.PlayerActivity;
 import local.mintv.R;
 import local.mintv.data.Channel;
 import local.mintv.data.BookmarkRepository;
+import local.mintv.data.ChannelSubscriptions;
 import local.mintv.data.ContinueWatchingItem;
 import local.mintv.data.Session;
 import local.mintv.details.WatchAction;
@@ -41,6 +43,10 @@ public final class PlaybackLauncher {
 
     public static void open(Activity activity, Channel channel, List<Channel> lineUp) {
         if (channel == null) {
+            return;
+        }
+        if (ChannelSubscriptions.isLocked(activity, channel.getNumber(), channel.isFreeToAir())) {
+            showLocked(activity);
             return;
         }
         if (lineUp != null) {
@@ -73,6 +79,21 @@ public final class PlaybackLauncher {
     }
 
     /**
+     * Explains that the selected channel is outside the account's subscription. Shared by
+     * every entry point so a locked channel never starts an entitlement call first.
+     */
+    public static void showLocked(Activity activity) {
+        if (activity == null || activity.isFinishing()) {
+            return;
+        }
+        new AlertDialog.Builder(activity)
+                .setTitle(R.string.channels_locked_title)
+                .setMessage(R.string.channels_locked_body)
+                .setPositiveButton(R.string.common_ok, null)
+                .show();
+    }
+
+    /**
      * Plays a finished EPG listing from the catch-up catalogue ("watch what aired earlier").
      *
      * @param channel the EPG row the programme belongs to; its {@code stationId} and channel
@@ -94,6 +115,10 @@ public final class PlaybackLauncher {
     private static void openTimeShifted(Activity activity, EpgChannel channel, EpgProgram program,
                                         boolean startOver) {
         if (activity == null || channel == null || program == null) {
+            return;
+        }
+        if (ChannelSubscriptions.isLocked(activity, channel.number, channel.freeToAir)) {
+            showLocked(activity);
             return;
         }
         if (!Session.get(activity).isLoggedIn()) {

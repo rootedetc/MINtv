@@ -52,7 +52,11 @@
     <string name="channels_retry">Try again</string>
     <string name="channels_hint">OK: watch   ◀ ▶ ▲ ▼: select</string>
     <string name="channels_free">FREE</string>
+    <string name="channels_locked">Not in your subscription</string>
+    <string name="channels_locked_title">Channel not in your subscription</string>
+    <string name="channels_locked_body">Sorry, this channel is not part of your subscription. Pick another channel or check your subscription.</string>
     <string name="channel_free_accessibility">free channel</string>
+    <string name="channel_locked_accessibility">locked channel, not part of your subscription</string>
     <string name="channels_source_cached">Cached</string>
     <string name="channels_source_live">Updated</string>
 
@@ -163,7 +167,7 @@
     <string name="channels_source">Source</string>
     <string name="channel_description">%1$s, channel %2$d</string>
     <string name="channel_footer_hint">Pick a channel · OK to play</string>
-    <string name="channel_footer_version">v0.1 · independent client</string>
+    <string name="channel_footer_version">v1.0.0 · independent client</string>
     <string name="footer_signed_in">Signed in: %1$s</string>
     <string name="action_sign_in">Sign in</string>
     <string name="action_refresh">Refresh</string>

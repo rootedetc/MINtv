@@ -31,12 +31,14 @@ import java.util.Set;
 import local.mintv.data.AccountChannelRepository;
 import local.mintv.data.Channel;
 import local.mintv.data.ChannelRepository;
+import local.mintv.data.ChannelSubscriptions;
 import local.mintv.data.Session;
 import local.mintv.epg.EpgCache;
 import local.mintv.net.ApiException;
 import local.mintv.net.Background;
 import local.mintv.net.PlaybackApi;
 import local.mintv.player.ChannelQueue;
+import local.mintv.player.PlaybackLauncher;
 import local.mintv.ui.ChannelAdapter;
 import local.mintv.ui.Shell;
 import local.mintv.ui.Tv;
@@ -75,8 +77,10 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
 
     private final List<Channel> allChannels = new ArrayList<>();
     private final Set<Integer> favourites = new HashSet<>();
+    private final Set<Integer> subscriptions = new HashSet<>();
     private final List<Integer> serverOrder = new ArrayList<>();
     private boolean favouritesKnown;
+    private boolean subscriptionsKnown;
     private boolean orderApplied;
     private boolean accountLoaded;
     private boolean accountLoading;
@@ -113,6 +117,11 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
             filter = 3;
         }
         if (Session.get(this).isLoggedIn()) {
+            Set<Integer> cached = ChannelSubscriptions.current(this);
+            if (cached != null) {
+                subscriptionsKnown = true;
+                subscriptions.addAll(cached);
+            }
             loadAccountChannels();
         }
         load(false);
@@ -128,12 +137,15 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
             if (!accountLoaded) {
                 loadAccountChannels();
             }
-        } else if (accountLoaded || favouritesKnown) {
+        } else if (accountLoaded || favouritesKnown || subscriptionsKnown) {
             accountLoaded = false;
             favouritesKnown = false;
+            subscriptionsKnown = false;
             favourites.clear();
+            subscriptions.clear();
             serverOrder.clear();
             orderApplied = false;
+            ChannelSubscriptions.clear();
             if (filter == 3) {
                 applyFilter(false);
             }
@@ -417,6 +429,7 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
         }
         adapter.submit(filtered);
         adapter.setFavouriteState(favourites, favouritesKnown);
+        adapter.setSubscriptionState(subscriptions, subscriptionsKnown);
         status.setText(getString(fromCache
                 ? R.string.channels_source_cached : R.string.channels_source_live));
         if (filtered.isEmpty()) {
@@ -564,6 +577,7 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
             load.order = order;
             try {
                 load.subscriptions = accountRepository.subscribedNumbers();
+                load.subscriptionsKnown = true;
             } catch (ApiException ignored) {
                 load.subscriptions = new HashSet<>();
             }
@@ -576,6 +590,16 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
                 favourites.clear();
                 favourites.addAll(load.favourites);
                 favouritesKnown = true;
+                if (load.subscriptionsKnown) {
+                    ChannelSubscriptions.publish(ChannelListActivity.this, load.subscriptions);
+                }
+                subscriptions.clear();
+                subscriptionsKnown = false;
+                Set<Integer> current = ChannelSubscriptions.current(ChannelListActivity.this);
+                if (current != null) {
+                    subscriptions.addAll(current);
+                    subscriptionsKnown = true;
+                }
                 serverOrder.clear();
                 serverOrder.addAll(load.order);
                 orderApplied = false;
@@ -867,6 +891,16 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
     }
 
     private void openChannel(Channel channel) {
+        Session session = Session.get(this);
+        if (!channel.isFreeToAir() && !session.isLoggedIn()) {
+            Toast.makeText(this, R.string.error_sign_in_required, Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (subscriptionsKnown && !channel.isFreeToAir()
+                && !subscriptions.contains(channel.getNumber())) {
+            PlaybackLauncher.showLocked(this);
+            return;
+        }
         if (!channel.isPlayable()) {
             Toast.makeText(this, R.string.error_no_stream, Toast.LENGTH_SHORT).show();
             return;
@@ -874,11 +908,6 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
         List<Channel> order = new ArrayList<>(adapter.current());
         ChannelQueue.set(order, order.indexOf(channel));
 
-        Session session = Session.get(this);
-        if (!channel.isFreeToAir() && !session.isLoggedIn()) {
-            Toast.makeText(this, R.string.error_sign_in_required, Toast.LENGTH_LONG).show();
-            return;
-        }
         if (channel.isFreeToAir()) {
             startActivity(PlayerActivity.intentForChannel(this, channel));
             return;
@@ -909,5 +938,6 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
         List<Integer> favourites = new ArrayList<>();
         List<Integer> order = new ArrayList<>();
         Set<Integer> subscriptions = new HashSet<>();
+        boolean subscriptionsKnown;
     }
 }

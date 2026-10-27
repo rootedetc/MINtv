@@ -39,6 +39,8 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
     private int railFocusId = View.NO_ID;
     private java.util.Set<Integer> favourites = java.util.Collections.emptySet();
     private boolean favouriteKnown;
+    private java.util.Set<Integer> subscriptions = java.util.Collections.emptySet();
+    private boolean subscriptionKnown;
 
     public ChannelAdapter(OnChannelClick listener) {
         this.listener = listener;
@@ -53,6 +55,13 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
     public void setFavouriteState(java.util.Set<Integer> numbers, boolean known) {
         favourites = numbers == null ? java.util.Collections.emptySet() : numbers;
         favouriteKnown = known;
+        notifyDataSetChanged();
+    }
+
+    /** Marks the channels the signed-in account cannot watch; unknown state never locks. */
+    public void setSubscriptionState(java.util.Set<Integer> numbers, boolean known) {
+        subscriptions = numbers == null ? java.util.Collections.emptySet() : numbers;
+        subscriptionKnown = known;
         notifyDataSetChanged();
     }
 
@@ -140,7 +149,7 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
     @Override
     public void onBindViewHolder(@NonNull ChannelHolder holder, int position) {
         holder.bind(channels.get(position), position, spanCount, railFocusId,
-                favourites, favouriteKnown, longClickListener);
+                favourites, favouriteKnown, subscriptions, subscriptionKnown, longClickListener);
     }
 
     @Override
@@ -152,6 +161,7 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
 
         private final ImageView logo;
         private final ImageView favourite;
+        private final ImageView lock;
         private final TextView number;
         private final TextView title;
         private final TextView quality;
@@ -163,6 +173,7 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
             super(itemView);
             logo = itemView.findViewById(R.id.channel_logo);
             favourite = itemView.findViewById(R.id.channel_favourite);
+            lock = itemView.findViewById(R.id.channel_lock);
             number = itemView.findViewById(R.id.channel_number);
             title = itemView.findViewById(R.id.channel_title);
             quality = itemView.findViewById(R.id.channel_quality);
@@ -188,6 +199,7 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
 
         void bind(Channel newChannel, int position, int spanCount, int railFocusId,
                   java.util.Set<Integer> favourites, boolean favouriteKnown,
+                  java.util.Set<Integer> subscriptions, boolean subscriptionKnown,
                   OnChannelLongClick longClickListener) {
             this.channel = newChannel;
             boolean focused = itemView.isFocused();
@@ -199,6 +211,12 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
                     ? View.VISIBLE : View.GONE);
             favourite.setImageResource(R.drawable.ic_favorite);
             favourite.setColorFilter(Tv.BRAND_BRIGHT);
+
+            boolean locked = subscriptionKnown && !newChannel.isFreeToAir()
+                    && !subscriptions.contains(newChannel.getNumber());
+            lock.setVisibility(locked ? View.VISIBLE : View.GONE);
+            lock.setImageResource(R.drawable.ic_lock);
+            lock.setColorFilter(Tv.TEXT_2);
             itemView.setOnLongClickListener(view -> {
                 if (longClickListener != null) {
                     longClickListener.onChannelLongClick(newChannel);
@@ -220,6 +238,10 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
             if (newChannel.isFreeToAir()) {
                 description += ", " + itemView.getContext().getString(
                         R.string.channel_free_accessibility);
+            }
+            if (locked) {
+                description += ", " + itemView.getContext().getString(
+                        R.string.channel_locked_accessibility);
             }
             itemView.setContentDescription(description);
 

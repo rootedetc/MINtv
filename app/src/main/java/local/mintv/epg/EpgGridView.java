@@ -7,6 +7,7 @@ import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.util.LruCache;
@@ -21,9 +22,11 @@ import android.widget.OverScroller;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.TimeZone;
 
 import local.mintv.R;
@@ -127,6 +130,8 @@ public final class EpgGridView extends View {
     private static final int LOGO_HEIGHT_DP = 32;
     private static final int LOGO_GAP_DP = 8;
     private static final int TITLE_GAP_DP = 9;
+    private static final int LOCK_CHIP_DP = 20;
+    private static final int LOCK_GLYPH_DP = 12;
 
     private static final int NOW_LINE_DP = 2;
     private static final int PROGRESS_HEIGHT_DP = 3;
@@ -187,6 +192,8 @@ public final class EpgGridView extends View {
     private final float density;
 
     private final List<EpgChannel> channels = new ArrayList<>();
+    private Set<Integer> subscriptions = Collections.emptySet();
+    private boolean subscriptionKnown;
 
     private Listener listener;
     private LogoProvider logoProvider;
@@ -219,6 +226,8 @@ public final class EpgGridView extends View {
     private final Paint nowPaint;
     private final Paint emptyPaint;
     private final Paint dashPaint;
+    private final Drawable lockGlyph;
+    private Bitmap lockBitmap;
 
     private final SimpleDateFormat timeFormatter;
     private final SimpleDateFormat dayFormatter;
@@ -291,6 +300,8 @@ public final class EpgGridView extends View {
     private float titleGapPx;
     private float dashHalfWidthPx;
     private float dashBaselineOffset;
+    private float lockChipPx;
+    private float lockGlyphPx;
 
     private final LruCache<EpgProgram, ProgramText> programTexts = new LruCache<>(4096);
     private final LruCache<EpgChannel, ChannelText> channelTexts = new LruCache<>(256);
@@ -375,6 +386,8 @@ public final class EpgGridView extends View {
         emptyPaint = createTextPaint(EMPTY_SP, Typeface.DEFAULT);
         dashPaint = createTextPaint(CHANNEL_TITLE_SP,
                 local.mintv.ui.Tv.displayMedium(getContext()));
+        Drawable glyph = getContext().getDrawable(R.drawable.ic_lock);
+        lockGlyph = glyph == null ? null : glyph.mutate();
 
         blockRadiusPx = dp(BLOCK_RADIUS_DP);
         blockGapPx = dp(BLOCK_GAP_DP);
@@ -401,6 +414,8 @@ public final class EpgGridView extends View {
         timeBaselineOffset = dp(TIME_BASELINE_DP);
         dashHalfWidthPx = dashPaint.measureText(DASH) / 2f;
         dashBaselineOffset = -(dashPaint.ascent() + dashPaint.descent()) / 2f;
+        lockChipPx = dp(LOCK_CHIP_DP);
+        lockGlyphPx = dp(LOCK_GLYPH_DP);
 
         emptyMessage = getContext().getString(R.string.guide_empty);
         nowLabel = getContext().getString(R.string.guide_now).toUpperCase(Locale.getDefault());
@@ -487,6 +502,17 @@ public final class EpgGridView extends View {
         if (!channels.isEmpty()) {
             notifyFocusChanged();
         }
+        postInvalidateOnAnimation();
+    }
+
+    /**
+     * Marks the channels the signed-in account cannot watch. A {@code null} set or
+     * {@code known == false} means the subscription has not loaded yet: nothing is locked.
+     */
+    public void setSubscriptionState(Set<Integer> numbers, boolean known) {
+        subscriptions = numbers == null ? Collections.emptySet() : numbers;
+        subscriptionKnown = known;
+        channelTexts.evictAll();
         postInvalidateOnAnimation();
     }
 
@@ -775,6 +801,27 @@ public final class EpgGridView extends View {
         nowPaint.setColor(0xFFFFFFFF);
         emptyPaint.setColor(textDimColor);
         dashPaint.setColor(blend(surfaceColor, textDimColor, 0.55f));
+        if (lockGlyph != null) {
+            lockGlyph.setTint(textDimColor);
+        }
+        rebuildLockBitmap();
+    }
+
+    /** Bakes the tiny vector lock once so the grid's onDraw never inflates a drawable. */
+    private void rebuildLockBitmap() {
+        if (lockGlyph == null || lockGlyphPx <= 0f) {
+            return;
+        }
+        int size = Math.max(1, Math.round(lockGlyphPx));
+        Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        lockGlyph.setBounds(0, 0, size, size);
+        lockGlyph.draw(canvas);
+        Bitmap previous = lockBitmap;
+        lockBitmap = bitmap;
+        if (previous != null && previous != bitmap) {
+            previous.recycle();
+        }
     }
 
     private void rebuildRulerLabels() {
@@ -1092,6 +1139,7 @@ public final class EpgGridView extends View {
     private void drawChannelCell(Canvas canvas, EpgChannel channel, float rowTop,
                                  float titleLeft, float titleWidth) {
         float centerY = rowTop + rowHeightPx / 2f;
+        boolean locked = isLocked(channel);
         ChannelText text = channelText(channel, titleWidth);
         boolean focused = ((int) (rowTop / rowHeightPx)) == focusRow;
         channelNumberPaint.setColor(focused ? accentBrightColor : textDimColor);
@@ -1137,6 +1185,10 @@ public final class EpgGridView extends View {
             canvas.restore();
         }
 
+        if (locked) {
+            drawLockChip(canvas, logoLeft + logoWidthPx + dp(2f), logoTop - dp(2f));
+        }
+
         if (text.title.length() > 0) {
             channelTitlePaint.setColor(((int) (rowTop / rowHeightPx)) == focusRow
                     ? 0xFFFFFFFF : textPrimaryColor);
@@ -1148,6 +1200,24 @@ public final class EpgGridView extends View {
             canvas.clipRect(titleLeft, rowTop, titleLeft + titleWidth, rowTop + rowHeightPx);
             canvas.drawText(text.title, titleLeft, titleBaseline, channelTitlePaint);
             canvas.restore();
+        }
+    }
+
+    private boolean isLocked(EpgChannel channel) {
+        return subscriptionKnown && channel != null && !channel.freeToAir
+                && !subscriptions.contains(channel.number);
+    }
+
+    /** A quiet lock plate on the channel logo, mirroring the channel cards. */
+    private void drawLockChip(Canvas canvas, float right, float top) {
+        float left = right - lockChipPx;
+        rectF.set(left, top, right, top + lockChipPx);
+        fillPaint.setColor(placeholderColor);
+        canvas.drawRoundRect(rectF, dp(4f), dp(4f), fillPaint);
+        if (lockBitmap != null && !lockBitmap.isRecycled()) {
+            float glyphLeft = left + (lockChipPx - lockGlyphPx) / 2f;
+            float glyphTop = top + (lockChipPx - lockGlyphPx) / 2f;
+            canvas.drawBitmap(lockBitmap, glyphLeft, glyphTop, logoPaint);
         }
     }
 

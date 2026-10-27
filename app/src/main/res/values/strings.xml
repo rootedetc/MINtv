@@ -56,7 +56,11 @@
     <string name="channels_retry">Pokušaj ponovno</string>
     <string name="channels_hint">OK: gledaj   ◀ ▶ ▲ ▼: odaberi</string>
     <string name="channels_free">BESPLATNO</string>
+    <string name="channels_locked">Nije u pretplati</string>
+    <string name="channels_locked_title">Kanal nije u pretplati</string>
+    <string name="channels_locked_body">Nažalost, ovaj kanal nije dio tvoje pretplate. Odaberi drugi kanal ili provjeri svoju pretplatu.</string>
     <string name="channel_free_accessibility">besplatan kanal</string>
+    <string name="channel_locked_accessibility">zaključan kanal, nije dio pretplate</string>
     <string name="channels_source_cached">Iz predmemorije</string>
     <string name="channels_source_live">Ažurirano</string>
 
@@ -171,7 +175,7 @@
     <string name="channels_source">Izvor</string>
     <string name="channel_description">%1$s, kanal %2$d</string>
     <string name="channel_footer_hint">Odaberi kanal · OK za reprodukciju</string>
-    <string name="channel_footer_version">v0.1 · neovisni klijent</string>
+    <string name="channel_footer_version">v1.0.0 · neovisni klijent</string>
     <string name="footer_signed_in">Prijavljen: %1$s</string>
     <string name="action_sign_in">Prijava</string>
     <string name="action_refresh">Osvježi</string>

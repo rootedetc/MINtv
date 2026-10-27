@@ -23,6 +23,7 @@ import android.widget.TextView;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import local.mintv.data.ChannelSubscriptions;
 import local.mintv.data.CredentialStore;
 import local.mintv.data.Session;
 import local.mintv.net.ApiException;
@@ -464,6 +465,8 @@ public final class LoginActivity extends BaseActivity {
                 } else {
                     CredentialStore.clear(LoginActivity.this);
                 }
+                // A different account must not inherit the previous subscription snapshot.
+                ChannelSubscriptions.clear();
                 setBusy(false);
                 loginStatus.setTextColor(getColor(R.color.success));
                 loginStatus.setText(R.string.login_success);

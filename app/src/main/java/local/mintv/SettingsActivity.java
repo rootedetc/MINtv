@@ -26,6 +26,7 @@ import java.util.Locale;
 
 import local.mintv.data.Channel;
 import local.mintv.data.ChannelRepository;
+import local.mintv.data.ChannelSubscriptions;
 import local.mintv.data.CredentialStore;
 import local.mintv.data.LocalePreference;
 import local.mintv.data.Session;
@@ -351,6 +352,7 @@ public final class SettingsActivity extends BaseActivity {
                 .setNegativeButton(R.string.common_cancel, null)
                 .setPositiveButton(R.string.settings_sign_out_confirm, (dialog, which) -> {
                     Session.get(this).clear();
+                    ChannelSubscriptions.clear();
                     showSection(SECTION_ACCOUNT);
                     Toast.makeText(this, R.string.settings_signed_out_toast,
                             Toast.LENGTH_SHORT).show();
