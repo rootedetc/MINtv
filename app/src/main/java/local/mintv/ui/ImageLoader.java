@@ -1,5 +1,6 @@
 package local.mintv.ui;
 
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Handler;
@@ -17,12 +18,18 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 
 /**
- * Tiny logo loader: OkHttp + a bounded in-memory {@link android.util.LruCache}.
+ * Tiny logo loader: OkHttp + a bounded in-memory {@link android.util.LruCache} backed by a
+ * shared on-disk cache.
  *
  * <p>No Coil/Glide/Picasso. Logos are small PNGs on a public CDN, so a 4-thread pool and
  * a 12 MB LRU are plenty for a 5-column TV grid. Each {@link ImageView} is tagged with the
  * URL it is currently showing; a late response for a recycled holder is dropped instead of
  * painting the wrong logo.</p>
+ *
+ * <p>{@link ImageDiskCache} makes a cold start cheap: an image cached within the last day is
+ * decoded from disk with no request at all, and an older one is painted immediately and then
+ * refreshed in the background. Call {@link #init(Context)} once per process (the app class
+ * does this) before the first load.</p>
  */
 public final class ImageLoader {
 
@@ -51,6 +58,11 @@ public final class ImageLoader {
             };
 
     private ImageLoader() {
+    }
+
+    /** Binds the shared disk cache to a context. Idempotent; call once from the app class. */
+    public static void init(Context context) {
+        ImageDiskCache.init(context);
     }
 
     public static void load(ImageView view, String url) {
@@ -96,20 +108,40 @@ public final class ImageLoader {
             view.setImageResource(R.drawable.ic_channel_placeholder);
         }
         POOL.execute(() -> {
-            Bitmap bitmap = download(remote, targetWidth, targetHeight);
-            if (bitmap == null) {
+            ImageDiskCache.Entry stored = ImageDiskCache.read(remote);
+            if (stored != null) {
+                Bitmap bitmap = decode(stored.bytes, targetWidth, targetHeight);
+                if (bitmap != null) {
+                    MEMORY.put(key, bitmap);
+                    paint(view, key, bitmap);
+                }
+                if (stored.fresh) {
+                    return;
+                }
+            }
+
+            byte[] bytes = downloadBytes(remote);
+            if (bytes == null) {
                 return;
             }
-            MEMORY.put(key, bitmap);
-            MAIN.post(() -> {
-                if (key.equals(view.getTag())) {
-                    view.setImageBitmap(bitmap);
-                }
-            });
+            Bitmap bitmap = decode(bytes, targetWidth, targetHeight);
+            if (bitmap != null) {
+                MEMORY.put(key, bitmap);
+                paint(view, key, bitmap);
+            }
+            ImageDiskCache.write(remote, bytes);
         });
     }
 
-    private static Bitmap download(String url, int targetWidth, int targetHeight) {
+    private static void paint(ImageView view, String key, Bitmap bitmap) {
+        MAIN.post(() -> {
+            if (key.equals(view.getTag())) {
+                view.setImageBitmap(bitmap);
+            }
+        });
+    }
+
+    private static byte[] downloadBytes(String url) {
         Request request = new Request.Builder()
                 .url(url)
                 .header("Accept", "image/*")
@@ -123,7 +155,10 @@ public final class ImageLoader {
                 return null;
             }
             byte[] bytes = body.bytes();
-            return decode(bytes, targetWidth, targetHeight);
+            if (bytes.length == 0 || bytes.length > MAX_DOWNLOAD_BYTES) {
+                return null;
+            }
+            return bytes;
         } catch (IOException | RuntimeException e) {
             return null;
         }

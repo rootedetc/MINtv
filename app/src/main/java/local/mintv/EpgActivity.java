@@ -201,7 +201,8 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
     private void loadGuide(boolean force) {
         errorBar.setVisibility(View.GONE);
         showGuideSkeleton();
-        epgRepository.loadDay(iso.format(new Date(dayStartMs)), this::onEpgLoaded, message -> {
+        epgRepository.loadDay(iso.format(new Date(dayStartMs)), force,
+                this::onEpgLoaded, message -> {
             hideGuideSkeleton();
             errorText.setText(TextUtils.isEmpty(message)
                     ? getString(R.string.guide_error) : message);

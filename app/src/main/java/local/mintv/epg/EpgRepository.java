@@ -65,8 +65,10 @@ import okhttp3.ResponseBody;
  * counter stops a late callback from an older load from overwriting a newer day.</p>
  *
  * <p>Cache: {@code filesDir/epg/<yyyy-MM-dd>.json}, compact, written atomically through a
- * {@code .tmp} file. {@link #loadDay} delivers the cache first (when present) and then the
- * network result, so the grid paints immediately. Files older than seven days are pruned.</p>
+ * {@code .tmp} file. {@link #loadDay} delivers the cache first (when present), so the grid
+ * paints immediately. A day cached less than {@link #CACHE_TTL_MS} ago is served on its own
+ * and the network is skipped; older days are revalidated in the background while the cached
+ * copy stays on screen. Files older than seven days are pruned.</p>
  *
  * <p>The cache carries a {@code version}: a file written by an older build (no version, or a
  * different one) is ignored rather than served, so the first load after an upgrade refetches the
@@ -90,11 +92,16 @@ public final class EpgRepository {
     private static final int PAGE_THREADS = 3;
     private static final int CACHE_RETENTION_DAYS = 7;
     private static final int CACHE_BUFFER = 64 * 1024;
+    /**
+     * How long a cached day is trusted without hitting the network. A TV guide changes
+     * slowly, so a day fetched less than a day ago is delivered as-is; the next launch after
+     * that refreshes it in the background.
+     */
+    private static final long CACHE_TTL_MS = TimeUnit.HOURS.toMillis(24);
     /** Bumped whenever the cached programme shape changes; older files are refetched. */
     private static final int CACHE_VERSION = 2;
 
     private static final String MSG_BAD_DATE = "Neispravan datum.";
-    private static final String MSG_NO_DAY = "Nijedan dan nije učitan.";
     private static final String MSG_CHANNELS = "Popis kanala nije dostupan.";
     private static final String MSG_SCHEDULE = "Programska šema nije dostupna.";
     private static final String MSG_UNEXPECTED = "Neočekivana pogreška pri učitavanju EPG-a.";
@@ -113,11 +120,13 @@ public final class EpgRepository {
 
     private static final class PendingLoad {
         final String date;
+        final boolean force;
         final Callback onLoaded;
         final ErrorCallback onError;
 
-        PendingLoad(String date, Callback onLoaded, ErrorCallback onError) {
+        PendingLoad(String date, boolean force, Callback onLoaded, ErrorCallback onError) {
             this.date = date;
+            this.force = force;
             this.onLoaded = onLoaded;
             this.onError = onError;
         }
@@ -138,6 +147,17 @@ public final class EpgRepository {
 
     /** Loads channels + a full day of EPG. Callback on the main thread. */
     public void loadDay(String isoDate, Callback onLoaded, ErrorCallback onError) {
+        loadDay(isoDate, false, onLoaded, onError);
+    }
+
+    /**
+     * Loads channels + a full day of EPG. Callback on the main thread.
+     *
+     * <p>With {@code force == false} a cache file younger than {@link #CACHE_TTL_MS} is
+     * delivered and the network is skipped entirely. With {@code force == true} the cache is
+     * still delivered first, but the network is always contacted.</p>
+     */
+    public void loadDay(String isoDate, boolean force, Callback onLoaded, ErrorCallback onError) {
         final String date = normaliseDate(isoDate);
         if (date == null) {
             Log.w(TAG, "Rejected invalid date: " + isoDate);
@@ -145,23 +165,25 @@ public final class EpgRepository {
             return;
         }
         if (!loading.compareAndSet(false, true)) {
-            pendingLoad.set(new PendingLoad(date, onLoaded, onError));
+            pendingLoad.set(new PendingLoad(date, force, onLoaded, onError));
             Log.i(TAG, "loadDay(" + date + ") queued: a load is already running");
             return;
         }
         final int gen = generation.incrementAndGet();
-        Log.i(TAG, "loadDay(" + date + ") gen=" + gen);
-        coordinator.execute(() -> runLoad(gen, date, onLoaded, onError));
+        Log.i(TAG, "loadDay(" + date + ") gen=" + gen + (force ? " force" : ""));
+        coordinator.execute(() -> runLoad(gen, date, force, onLoaded, onError));
     }
 
-    /** Reloads the day already in use. */
+    /**
+     * Reloads the day already in use, bypassing the freshness window. With no day loaded yet
+     * (for example from Settings) it refreshes today.
+     */
     public void refresh(Callback onLoaded, ErrorCallback onError) {
         String date = currentDate;
         if (date == null) {
-            postNow(onError, MSG_NO_DAY);
-            return;
+            date = LocalDate.now().toString();
         }
-        loadDay(date, onLoaded, onError);
+        loadDay(date, true, onLoaded, onError);
     }
 
     /** ISO date of the loaded day, or {@code null} before the first delivery. */
@@ -177,16 +199,21 @@ public final class EpgRepository {
     // Load pipeline (background)
     // ---------------------------------------------------------------------------------------
 
-    private void runLoad(int gen, String date, Callback onLoaded, ErrorCallback onError) {
+    private void runLoad(int gen, String date, boolean force, Callback onLoaded,
+                         ErrorCallback onError) {
         try {
             ensureCacheDir();
             pruneCache();
 
-            List<EpgChannel> cached = readCache(date);
-            if (cached != null && !cached.isEmpty() && isCurrent(gen)) {
-                Log.i(TAG, "Delivering " + cached.size() + " cached channels for " + date);
-                publish(date, cached);
-                post(gen, onLoaded, cached);
+            CachedDay cached = readCachedDay(date);
+            if (cached != null && !cached.channels.isEmpty() && isCurrent(gen)) {
+                Log.i(TAG, "Delivering " + cached.channels.size() + " cached channels for " + date);
+                publish(date, cached.channels);
+                post(gen, onLoaded, cached.channels);
+                if (!force && isFresh(cached.fetchedAt)) {
+                    Log.i(TAG, "Cache for " + date + " is fresh; skipping the network");
+                    return;
+                }
             }
 
             List<ChannelInfo> lineup;
@@ -243,7 +270,7 @@ public final class EpgRepository {
             PendingLoad next = pendingLoad.getAndSet(null);
             if (next != null) {
                 Log.i(TAG, "Starting queued EPG load for " + next.date);
-                loadDay(next.date, next.onLoaded, next.onError);
+                loadDay(next.date, next.force, next.onLoaded, next.onError);
             }
         }
     }
@@ -533,7 +560,7 @@ public final class EpgRepository {
         }
     }
 
-    private List<EpgChannel> readCache(String date) {
+    private CachedDay readCachedDay(String date) {
         File file = new File(cacheDir, date + ".json");
         if (!file.isFile()) {
             return null;
@@ -543,21 +570,29 @@ public final class EpgRepository {
                 new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8),
                 CACHE_BUFFER);
              JsonReader reader = new JsonReader(input)) {
-            List<EpgChannel> cached = parseCache(reader, date);
-            if (cached.isEmpty()) {
+            CachedDay cached = parseCache(reader, date);
+            if (cached.channels.isEmpty()) {
                 Log.w(TAG, "Cache for " + date + " has no channels; ignoring it");
                 return null;
             }
-            cached.sort(Comparator.comparingInt((EpgChannel channel) -> channel.number)
+            cached.channels.sort(Comparator.comparingInt((EpgChannel channel) -> channel.number)
                     .thenComparing(channel -> channel.title, String.CASE_INSENSITIVE_ORDER));
-            Log.i(TAG, "Read " + cached.size() + " channels from cache " + file.getName());
-            return cached;
+            // Older files written before fetched_at existed fall back to the file timestamp.
+            long fetchedAt = cached.fetchedAt > 0L ? cached.fetchedAt : file.lastModified();
+            Log.i(TAG, "Read " + cached.channels.size() + " channels from cache "
+                    + file.getName());
+            return new CachedDay(cached.channels, fetchedAt);
         } catch (IOException | RuntimeException e) {
             Log.w(TAG, "Cache " + file.getName() + " is unreadable; deleting it", e);
             //noinspection ResultOfMethodCallIgnored
             file.delete();
             return null;
         }
+    }
+
+    private static boolean isFresh(long fetchedAt) {
+        long age = System.currentTimeMillis() - fetchedAt;
+        return fetchedAt > 0L && age >= 0L && age < CACHE_TTL_MS;
     }
 
     private void writeCache(String date, List<EpgChannel> data) {
@@ -572,6 +607,7 @@ public final class EpgRepository {
             writer.beginObject();
             writer.name("version").value(CACHE_VERSION);
             writer.name("date").value(date);
+            writer.name("fetched_at").value(System.currentTimeMillis());
             writer.name("channels").beginArray();
             for (EpgChannel channel : data) {
                 writer.beginObject();
@@ -629,10 +665,11 @@ public final class EpgRepository {
                 + " (" + target.length() + " bytes)");
     }
 
-    static List<EpgChannel> parseCache(JsonReader reader, String expectedDate)
+    static CachedDay parseCache(JsonReader reader, String expectedDate)
             throws IOException {
         int version = 0;
         String date = null;
+        long fetchedAt = 0L;
         List<EpgChannel> channels = new ArrayList<>();
         reader.beginObject();
         while (reader.hasNext()) {
@@ -641,6 +678,8 @@ public final class EpgRepository {
                 version = (int) nextLong(reader);
             } else if ("date".equals(name)) {
                 date = nextString(reader);
+            } else if ("fetched_at".equals(name)) {
+                fetchedAt = nextLong(reader);
             } else if ("channels".equals(name)) {
                 reader.beginArray();
                 while (reader.hasNext()) {
@@ -654,12 +693,12 @@ public final class EpgRepository {
         reader.endObject();
         if (version != CACHE_VERSION) {
             // Old shape (no version at all, or a previous one): let the caller refetch.
-            return Collections.emptyList();
+            return new CachedDay(Collections.emptyList(), 0L);
         }
         if (date != null && !date.equals(expectedDate)) {
-            return Collections.emptyList();
+            return new CachedDay(Collections.emptyList(), 0L);
         }
-        return channels;
+        return new CachedDay(channels, fetchedAt);
     }
 
     private static EpgChannel readCachedChannel(JsonReader reader) throws IOException {
@@ -949,6 +988,17 @@ public final class EpgRepository {
             this.logoUrl = logoUrl;
             this.quality = quality;
             this.freeToAir = freeToAir;
+        }
+    }
+
+    /** A parsed cache file plus the instant it was written. */
+    static final class CachedDay {
+        final List<EpgChannel> channels;
+        final long fetchedAt;
+
+        CachedDay(List<EpgChannel> channels, long fetchedAt) {
+            this.channels = channels;
+            this.fetchedAt = fetchedAt;
         }
     }
 

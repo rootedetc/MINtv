@@ -40,8 +40,10 @@ import okhttp3.ResponseBody;
  * <p>Fetches run on a small bounded daemon pool (3 threads, 64 queued) through the shared
  * {@link Http#client()}. In-flight URLs are deduplicated, the decoded bitmap is downsampled
  * to the grid's drawn logo box (46x30 dp by default, i.e. ~92x60 px on a 2x TV) and kept in
- * an 8 MB memory cache. Arrivals are coalesced into a single main-thread {@code onLoaded}
- * callback per batch, which the caller wires to {@code grid::invalidate}.</p>
+ * an 8 MB memory cache. {@link ImageDiskCache} sits underneath: logos cached within the last
+ * day are decoded from disk without a request, older ones are painted from disk first and
+ * refreshed in the background. Arrivals are coalesced into a single main-thread
+ * {@code onLoaded} callback per batch, which the caller wires to {@code grid::invalidate}.</p>
  *
  * <p>When constructed with a {@link View}, the loader observes attach state: detaching
  * cancels queued/in-flight work, and no callback is posted to a detached view. It only ever
@@ -127,6 +129,7 @@ public final class EpgLogoLoader {
         }
         Context application = context.getApplicationContext();
         appContext = application != null ? application : context;
+        ImageDiskCache.init(appContext);
         this.onLoaded = onLoaded;
 
         Resources resources = appContext.getResources();
@@ -268,16 +271,44 @@ public final class EpgLogoLoader {
                 if (!isCurrent(taskGeneration)) {
                     return;
                 }
-                Bitmap bitmap = fetch(url, taskGeneration);
+
+                boolean painted = false;
+                ImageDiskCache.Entry cached = ImageDiskCache.read(url);
+                if (cached != null) {
+                    Bitmap bitmap = decode(cached.bytes);
+                    if (!isCurrent(taskGeneration)) {
+                        return;
+                    }
+                    if (bitmap != null) {
+                        cache.put(url, bitmap);
+                        notifyLoaded();
+                        painted = true;
+                        if (cached.fresh) {
+                            return;
+                        }
+                    }
+                }
+
+                byte[] bytes = download(url, taskGeneration);
                 if (!isCurrent(taskGeneration)) {
                     return;
                 }
+                if (bytes == null) {
+                    if (!painted) {
+                        failed.put(url, SystemClock.elapsedRealtime());
+                    }
+                    return;
+                }
+                Bitmap bitmap = decode(bytes);
                 if (bitmap == null) {
-                    failed.put(url, SystemClock.elapsedRealtime());
+                    if (!painted) {
+                        failed.put(url, SystemClock.elapsedRealtime());
+                    }
                     return;
                 }
                 cache.put(url, bitmap);
                 notifyLoaded();
+                ImageDiskCache.write(url, bytes);
             } finally {
                 pending.remove(url, taskGeneration);
             }
@@ -295,7 +326,7 @@ public final class EpgLogoLoader {
         return active && taskGeneration == generation.get();
     }
 
-    private Bitmap fetch(String url, int taskGeneration) {
+    private byte[] download(String url, int taskGeneration) {
         Request request = new Request.Builder()
                 .url(url)
                 .header("Accept", "image/*")
@@ -322,10 +353,7 @@ public final class EpgLogoLoader {
                 if (bytes.length == 0 || bytes.length > MAX_DOWNLOAD_BYTES) {
                     return null;
                 }
-                if (!isCurrent(taskGeneration)) {
-                    return null;
-                }
-                return decode(bytes);
+                return isCurrent(taskGeneration) ? bytes : null;
             }
         } catch (IOException | RuntimeException e) {
             // 404s, timeouts, cancellation, malformed images: draw the placeholder.
