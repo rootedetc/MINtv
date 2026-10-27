@@ -23,7 +23,6 @@ import java.io.OutputStreamWriter;
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
@@ -622,6 +621,7 @@ public final class EpgRepository {
                     writer.beginObject();
                     writer.name("id").value(nonNull(programme.id));
                     writer.name("title").value(nonNull(programme.title));
+                    writer.name("title_missing").value(programme.titleMissing);
                     writer.name("description").value(nonNull(programme.description));
                     writer.name("genre").value(nonNull(programme.genre));
                     writer.name("show_type").value(nonNull(programme.showType));
@@ -750,6 +750,7 @@ public final class EpgRepository {
     private static EpgProgram readCachedProgram(JsonReader reader) throws IOException {
         String id = "";
         String title = "";
+        boolean titleMissing = false;
         String description = "";
         String genre = "";
         String showType = "";
@@ -772,6 +773,9 @@ public final class EpgRepository {
                     break;
                 case "title":
                     title = nextString(reader);
+                    break;
+                case "title_missing":
+                    titleMissing = nextBoolean(reader);
                     break;
                 case "description":
                     description = nextString(reader);
@@ -818,47 +822,21 @@ public final class EpgRepository {
             }
         }
         reader.endObject();
-        return cachedProgram(id, title, description, genre, showType, startMs, endMs,
-                catchup, adult, listingGuid, catchupId, catchupKey, mediaId,
+        return cachedProgram(id, title, titleMissing, description, genre, showType,
+                startMs, endMs, catchup, adult, listingGuid, catchupId, catchupKey, mediaId,
                 hasStartOver, hasTimeshift);
     }
 
-    /**
-     * Rebuilds an {@link EpgProgram} from cache fields. {@link EpgProgram} only offers the wire
-     * factory, so the epoch millis are rendered back to the ISO shape it parses.
-     */
-    static EpgProgram cachedProgram(String id, String title, String description, String genre,
+    /** Rebuilds a cached programme directly, without re-parsing the wire format. */
+    static EpgProgram cachedProgram(String id, String title, boolean titleMissing,
+                                    String description, String genre,
                                     String showType, long startMs, long endMs,
                                     boolean catchup, boolean adult,
                                     String listingGuid, String catchupId, String catchupKey,
                                     String mediaId, boolean hasStartOver, boolean hasTimeshift) {
-        try {
-            JSONObject object = new JSONObject();
-            object.put("program_id", nonNull(id));
-            object.put("episode_name", nonNull(title));
-            object.put("description", nonNull(description));
-            JSONArray genres = new JSONArray();
-            if (genre != null && !genre.isEmpty()) {
-                genres.put(new JSONObject().put("name", genre));
-            }
-            object.put("genres", genres);
-            object.put("show_type", nonNull(showType));
-            object.put("start_time", Instant.ofEpochMilli(startMs).toString());
-            object.put("end_time", Instant.ofEpochMilli(endMs).toString());
-            object.put("is_catchup_enabled", catchup);
-            object.put("is_adult", adult);
-            object.put("listing_guid", nonNull(listingGuid));
-            object.put("catchup_id", nonNull(catchupId));
-            object.put("catchup_key", nonNull(catchupKey));
-            object.put("media_id", nonNull(mediaId));
-            JSONObject entitlements = new JSONObject();
-            entitlements.put("hasStartOver", hasStartOver);
-            entitlements.put("hasTimeshift", hasTimeshift);
-            object.put("entitlements", entitlements);
-            return EpgProgram.fromJson("", object);
-        } catch (JSONException e) {
-            throw new IllegalStateException("Cannot rebuild a cached programme", e);
-        }
+        return EpgProgram.fromCache(id, title, titleMissing, description, genre, showType,
+                startMs, endMs, catchup, adult, listingGuid, catchupId, catchupKey, mediaId,
+                hasStartOver, hasTimeshift);
     }
 
     private static String nextString(JsonReader reader) throws IOException {

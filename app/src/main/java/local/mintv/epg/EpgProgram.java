@@ -121,8 +121,24 @@ public final class EpgProgram {
         return catchup && isLive(nowMs);
     }
 
-    static EpgProgram fromJson(String stationId, JSONObject json) {
-        // Observed wire shape: this endpoint does NOT send a "title" field. The programme
+    /**
+     * Rebuilds an {@link EpgProgram} from the on-disk cache. Cached times are already epoch
+     * millis and the title/synopsis were normalised on write, so this bypasses the wire JSON
+     * and the date parser entirely. That matters on a TV: the old round-trip allocated two
+     * {@link SimpleDateFormat} instances per programme, which dominated a cold cache read.
+     */
+    static EpgProgram fromCache(String id, String title, boolean titleMissing,
+                                String description, String genre, String showType,
+                                long startMs, long endMs, boolean catchup, boolean adult,
+                                String listingGuid, String catchupId, String catchupKey,
+                                String mediaId, boolean hasStartOver, boolean hasTimeshift) {
+        return new EpgProgram(clean(id), clean(title), titleMissing, clean(description),
+                clean(genre), clean(showType), startMs, endMs, catchup, adult,
+                clean(listingGuid), clean(catchupId), clean(catchupKey), clean(mediaId),
+                hasStartOver, hasTimeshift);
+    }
+
+    static EpgProgram fromJson(String stationId, JSONObject json) {        // Observed wire shape: this endpoint does NOT send a "title" field. The programme
         // name arrives in "episode_name" when the EPG has one, otherwise in "description"
         // (e.g. "Dnevnik 1", "TV kalendar"); "full_description" holds the synopsis.
         String name = clean(json.optString("episode_name", ""));
