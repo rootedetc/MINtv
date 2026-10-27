@@ -8,12 +8,13 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -21,9 +22,6 @@ import local.mintv.data.Channel;
 import local.mintv.data.Session;
 import local.mintv.epg.EpgChannel;
 import local.mintv.epg.EpgProgram;
-import okhttp3.HttpUrl;
-import okhttp3.Request;
-import okhttp3.Response;
 
 /**
  * Authenticated playback lookup: playinfo -> /media -> Widevine licence material.
@@ -40,12 +38,20 @@ import okhttp3.Response;
  * claims of the session JWT and is authorised with HTTP Basic
  * {@code b64(accountUrl/accountId:personaToken)}.</p>
  *
+ * <p><b>Same envelope as every other BFF call.</b> The player routes are not special: the web
+ * client builds them with the shared header builder, so they carry the full guest envelope
+ * ({@code Device-Id}, {@code x-txn-id}, …), the account headers ({@code bff_token},
+ * {@code x-channel-map-id}, {@code x-user-id}, {@code x-account-details}) and the player
+ * {@code x-tv-flow}/{@code x-tv-step} pair. Sending a reduced header set is what the BFF
+ * rejects with a bare 500, so this class goes through {@link BffApi} instead of hand-rolling
+ * requests.</p>
+ *
  * <p><b>Catch-up / start-over</b> (PROTOCOL.md §3.9–§3.10). Both use the same three calls, only
  * the playinfo route and the selector {@code content_type} differ:</p>
  * <pre>
  * GET /hr-bifrost/player/playinfo/catchup
  *       ?program_id&amp;natco_key&amp;device_type=WEB&amp;station_id
- *       &amp;start_time&amp;end_time[&amp;channel_number][&amp;listing_guid][&amp;app_language][&amp;natco_code]
+ *       &amp;start_time&amp;end_time[&amp;channel_number][&amp;listing_guid]
  * GET /hr-bifrost/media?…&amp;content_type=catchup
  * </pre>
  * <p>{@code start_time}/{@code end_time} are the API's own wire format
@@ -66,6 +72,14 @@ public final class PlaybackApi {
     private static final String MSG_NOT_START_OVER = "This programme is not available for restart.";
     private static final String MSG_SESSION_EXPIRED =
             "Your session has expired. Please sign in again.";
+
+    /** {@code x-tv-flow} value for every player call (PROTOCOL.md §2.5). */
+    private static final String FLOW_PLAYER = "PLAYER";
+    /** {@code x-tv-step} values, one per endpoint (PROTOCOL.md §2.5). */
+    private static final String STEP_LIVE = "LIVE_PLAYBACK";
+    private static final String STEP_VOD = "VOD_PLAYBACK";
+    private static final String STEP_CATCHUP = "CATCHUP_PLAYBACK";
+    private static final String STEP_MEDIA = "MEDIA_CALL";
 
     /** The EPG wire format for playinfo times: {@code 2026-10-25T10:03:00.00Z}, UTC. */
     private static final DateTimeFormatter WIRE_TIME =
@@ -170,13 +184,11 @@ public final class PlaybackApi {
             throw new ApiException(ApiException.AUTH, "not signed in");
         }
 
-        JSONObject playinfo = get(url("/player/playinfo/channel")
-                .addQueryParameter("natco_key", GuestAuth.NATCO_KEY)
-                .addQueryParameter("device_type", "WEB")
-                .addQueryParameter("channel_number", Integer.toString(channel.getNumber()))
-                .addQueryParameter("app_language", GuestAuth.APP_LANGUAGE)
-                .addQueryParameter("natco_code", GuestAuth.NATCO_CODE)
-                .build(), token);
+        Map<String, String> query = new LinkedHashMap<>();
+        query.put("natco_key", GuestAuth.NATCO_KEY);
+        query.put("device_type", "WEB");
+        query.put("channel_number", Integer.toString(channel.getNumber()));
+        JSONObject playinfo = bffGet("/player/playinfo/channel", query, STEP_LIVE);
 
         JSONObject data = playinfo.optJSONObject("data");
         JSONObject info = data == null ? null : data.optJSONObject("playBackInfoResponse");
@@ -188,7 +200,8 @@ public final class PlaybackApi {
         if (mediaId.isEmpty()) {
             throw new ApiException(ApiException.PARSE, "no media_id for channel " + channel.getNumber());
         }
-        Log.i(TAG, "playinfo type=" + type + " mediaId=" + mediaId);
+        Log.i(TAG, "playinfo channel=" + channel.getNumber() + " type=" + type
+                + " mediaId=" + mediaId);
 
         return fetchPlayback(mediaId, type, token);
     }
@@ -233,24 +246,21 @@ public final class PlaybackApi {
             throw new ApiException(ApiException.PARSE, notAvailable);
         }
 
-        HttpUrl.Builder playinfoUrl = url("/player/playinfo/catchup")
-                .addQueryParameter("program_id", programId)
-                .addQueryParameter("natco_key", GuestAuth.NATCO_KEY)
-                .addQueryParameter("device_type", "WEB")
-                .addQueryParameter("station_id", stationId)
-                .addQueryParameter("start_time", wireTime(program.startMs))
-                .addQueryParameter("end_time", wireTime(program.endMs));
+        Map<String, String> query = new LinkedHashMap<>();
+        query.put("program_id", programId);
+        query.put("natco_key", GuestAuth.NATCO_KEY);
+        query.put("device_type", "WEB");
+        query.put("station_id", stationId);
+        query.put("start_time", wireTime(program.startMs));
+        query.put("end_time", wireTime(program.endMs));
         if (channel.number > 0) {
-            playinfoUrl.addQueryParameter("channel_number", Integer.toString(channel.number));
+            query.put("channel_number", Integer.toString(channel.number));
         }
         if (!nullToEmpty(program.listingGuid).isEmpty()) {
             // §3.9 lists listing_guid as an optional catch-up parameter. It identifies the exact
             // EPG listing when the same programme_id airs more than once; send it when present.
-            playinfoUrl.addQueryParameter("listing_guid", program.listingGuid);
+            query.put("listing_guid", program.listingGuid);
         }
-        playinfoUrl.addQueryParameter("app_language", GuestAuth.APP_LANGUAGE)
-                .addQueryParameter("natco_code", GuestAuth.NATCO_CODE);
-        HttpUrl requestUrl = playinfoUrl.build();
         Log.i(CATCHUP_TAG, "playinfo " + (startOver ? "start-over" : "catch-up")
                 + " program=" + programId + " station=" + stationId
                 + " start=" + wireTime(program.startMs) + " end=" + wireTime(program.endMs)
@@ -259,7 +269,7 @@ public final class PlaybackApi {
 
         JSONObject response;
         try {
-            response = getDetailed(requestUrl, token);
+            response = bffGet("/player/playinfo/catchup", query, STEP_CATCHUP);
         } catch (ApiException e) {
             throw catchupFailure(e, notAvailable);
         }
@@ -315,16 +325,14 @@ public final class PlaybackApi {
         if (programId == null || programId.isEmpty()) {
             throw new ApiException(ApiException.PARSE, "Nema identifikatora sadržaja.");
         }
-        HttpUrl.Builder url = url("/player/playinfo/program")
-                .addQueryParameter("program_id", programId)
-                .addQueryParameter("natco_key", GuestAuth.NATCO_KEY)
-                .addQueryParameter("device_type", "WEB")
-                .addQueryParameter("app_language", GuestAuth.APP_LANGUAGE)
-                .addQueryParameter("natco_code", GuestAuth.NATCO_CODE);
+        Map<String, String> query = new LinkedHashMap<>();
+        query.put("program_id", programId);
+        query.put("natco_key", GuestAuth.NATCO_KEY);
+        query.put("device_type", "WEB");
         if (mediaId != null && !mediaId.isEmpty()) {
-            url.addQueryParameter("video_id", mediaId);
+            query.put("video_id", mediaId);
         }
-        JSONObject response = getDetailed(url.build(), token);
+        JSONObject response = bffGet("/player/playinfo/program", query, STEP_VOD);
         JSONObject data = response.optJSONObject("data");
         JSONObject info = data == null ? null : data.optJSONObject("playBackInfoResponse");
         if (info == null) {
@@ -359,24 +367,22 @@ public final class PlaybackApi {
                 || stationId.isEmpty() || startMs <= 0 || endMs <= startMs) {
             throw new ApiException(ApiException.SERVER, MSG_NOT_CATCHUP);
         }
-        HttpUrl.Builder url = url("/player/playinfo/catchup")
-                .addQueryParameter("program_id", programId)
-                .addQueryParameter("natco_key", GuestAuth.NATCO_KEY)
-                .addQueryParameter("device_type", "WEB")
-                .addQueryParameter("station_id", stationId)
-                .addQueryParameter("start_time", wireTime(startMs))
-                .addQueryParameter("end_time", wireTime(endMs));
+        Map<String, String> query = new LinkedHashMap<>();
+        query.put("program_id", programId);
+        query.put("natco_key", GuestAuth.NATCO_KEY);
+        query.put("device_type", "WEB");
+        query.put("station_id", stationId);
+        query.put("start_time", wireTime(startMs));
+        query.put("end_time", wireTime(endMs));
         if (channelNumber > 0) {
-            url.addQueryParameter("channel_number", Integer.toString(channelNumber));
+            query.put("channel_number", Integer.toString(channelNumber));
         }
         if (listingGuid != null && !listingGuid.isEmpty()) {
-            url.addQueryParameter("listing_guid", listingGuid);
+            query.put("listing_guid", listingGuid);
         }
-        url.addQueryParameter("app_language", GuestAuth.APP_LANGUAGE)
-                .addQueryParameter("natco_code", GuestAuth.NATCO_CODE);
         JSONObject response;
         try {
-            response = getDetailed(url.build(), token);
+            response = bffGet("/player/playinfo/catchup", query, STEP_CATCHUP);
         } catch (ApiException e) {
             throw catchupFailure(e, MSG_NOT_CATCHUP);
         }
@@ -401,15 +407,13 @@ public final class PlaybackApi {
      */
     private Playback fetchPlayback(String mediaId, String contentType, String token)
             throws ApiException {
-        JSONObject media = get(url("/media")
-                .addQueryParameter("client_id", GuestAuth.deviceId(appContext))
-                .addQueryParameter("media_id", mediaId)
-                .addQueryParameter("natco_key", GuestAuth.NATCO_KEY)
-                .addQueryParameter("src_format", "MPEG-DASH")
-                .addQueryParameter("content_type", contentType)
-                .addQueryParameter("app_language", GuestAuth.APP_LANGUAGE)
-                .addQueryParameter("natco_code", GuestAuth.NATCO_CODE)
-                .build(), token);
+        Map<String, String> query = new LinkedHashMap<>();
+        query.put("client_id", GuestAuth.deviceId(appContext));
+        query.put("media_id", mediaId);
+        query.put("natco_key", GuestAuth.NATCO_KEY);
+        query.put("src_format", "MPEG-DASH");
+        query.put("content_type", contentType);
+        JSONObject media = bffGet("/media", query, STEP_MEDIA);
 
         JSONObject video = media.optJSONObject("video");
         if (video == null && media.optJSONObject("data") != null) {
@@ -443,59 +447,18 @@ public final class PlaybackApi {
 
     // ---------------------------------------------------------------- helpers
 
+    /**
+     * One authenticated player call through the shared BFF transport, so it carries exactly the
+     * envelope the web client uses (guest headers + account headers + player flow/step).
+     */
+    private JSONObject bffGet(String path, Map<String, String> query, String step)
+            throws ApiException {
+        return BffApi.get(appContext, path, query, true, "xhdpi", false,
+                FLOW_PLAYER, step, "");
+    }
+
     private static String wireTime(long epochMs) {
         return WIRE_TIME.format(Instant.ofEpochMilli(epochMs));
-    }
-
-    private static HttpUrl.Builder url(String path) {
-        return HttpUrl.parse(MinTvApi.BASE_URL + path).newBuilder();
-    }
-
-    private Request buildGet(HttpUrl url, String bffToken) {
-        return new Request.Builder()
-                .url(url)
-                .header("bff_token", bffToken)
-                .header("Device-Density", "xhdpi")
-                .header("tenant", "tv")
-                .header("app_key", GuestAuth.APP_KEY)
-                .header("app_version", GuestAuth.APP_VERSION)
-                .header("x-call-type", "AUTH_USER")
-                .header("x-user-agent", GuestAuth.USER_AGENT)
-                .header("Accept", "application/json")
-                .get()
-                .build();
-    }
-
-    private JSONObject get(HttpUrl url, String bffToken) throws ApiException {
-        return send(buildGet(url, bffToken), url, false);
-    }
-
-    /** Same as {@link #get} but appends the server's {@code displayMessage} to failures. */
-    private JSONObject getDetailed(HttpUrl url, String bffToken) throws ApiException {
-        return send(buildGet(url, bffToken), url, true);
-    }
-
-    private JSONObject send(Request request, HttpUrl url, boolean detailed) throws ApiException {
-        try (Response response = Http.client().newCall(request).execute()) {
-            String text = response.body() == null ? "" : response.body().string();
-            if (!response.isSuccessful()) {
-                int code = response.code() == 401 || response.code() == 403
-                        ? ApiException.AUTH : ApiException.SERVER;
-                String message = "HTTP " + response.code() + " " + url.encodedPath();
-                if (detailed) {
-                    String detail = serverMessage(text);
-                    if (!detail.isEmpty()) {
-                        message = message + ": " + detail;
-                    }
-                }
-                throw new ApiException(code, message, response.code(), null);
-            }
-            return new JSONObject(text);
-        } catch (IOException e) {
-            throw new ApiException(ApiException.NETWORK, String.valueOf(e.getMessage()), 0, e);
-        } catch (JSONException e) {
-            throw new ApiException(ApiException.PARSE, "bad JSON from " + url.encodedPath(), 0, e);
-        }
     }
 
     /**
@@ -532,17 +495,6 @@ public final class PlaybackApi {
             message = object.optString("error_message", "");
         }
         return nullToEmpty(message);
-    }
-
-    private static String serverMessage(String body) {
-        if (body == null || body.isEmpty()) {
-            return "";
-        }
-        try {
-            return serverMessage(new JSONObject(body));
-        } catch (JSONException e) {
-            return "";
-        }
     }
 
     private static String nullToEmpty(String value) {
