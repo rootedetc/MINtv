@@ -173,6 +173,10 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
         rail.setListener(new TvRail.Listener() {
             @Override
             public void onTabSelected(TvRail.Tab tab) {
+                if (tab == TvRail.Tab.CHANNELS) {
+                    grid.requestFocus();
+                    return;
+                }
                 Shell.open(ChannelListActivity.this, tab);
             }
 

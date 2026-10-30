@@ -14,7 +14,6 @@ import local.mintv.data.Channel;
 import local.mintv.data.ChannelRepository;
 import local.mintv.data.ContinueWatchingItem;
 import local.mintv.data.HomeAsset;
-import local.mintv.data.WatchlistItem;
 import local.mintv.player.PlaybackLauncher;
 
 /** Central router for the server's {@code magiotv://} contracts. */
@@ -40,18 +39,6 @@ public final class DeepLinks {
         }
     }
 
-    public static void openWatchlistItem(Activity activity, WatchlistItem item) {
-        if (item == null) {
-            return;
-        }
-        if (!item.ctaDeeplink.isEmpty() && open(activity, item.ctaDeeplink)) {
-            return;
-        }
-        if (!item.id.isEmpty()) {
-            activity.startActivity(ContentDetailActivity.intent(activity, item.id,
-                    item.isSeries(), item.displayTitle(), TvRail.Tab.HOME));
-        }
-    }
 
     public static void openContinueWatching(Activity activity, ContinueWatchingItem item) {
         if (item == null) {

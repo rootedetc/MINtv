@@ -74,20 +74,14 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
     private TextView timeLabel;
     private TextView titleLabel;
     private TextView descriptionLabel;
-    private TextView channelNumber;
-    private TextView channelName;
     private ImageView channelLogo;
     private ImageView channelLock;
     private ImageView programmePoster;
     private View posterFallback;
-    private TextView posterNumber;
     private TextView nextTitle;
     private TextView nextTime;
-    private View progressFill;
-    private View progressRest;
 
     private static final int ON_AIR_HEIGHT_DP = 152;
-    private static final int ON_AIR_TRACK_DP = 3;
     private static final int ON_AIR_POSTER_HEIGHT_DP = 112;
 
     private final Map<Integer, Channel> lineUp = new HashMap<>();
@@ -107,9 +101,8 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
     private long dayStartMs;
     private boolean firstDelivery = true;
     private String stateTag = "";
-    private float progressFraction = -1f;
 
-    private final Runnable progressTick = new Runnable() {
+    private final Runnable timeTick = new Runnable() {
         @Override
         public void run() {
             long now = System.currentTimeMillis();
@@ -123,8 +116,6 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
                 updateHeaderDate();
                 firstDelivery = true;
                 loadGuide(false);
-            } else {
-                updateProgress(now);
             }
             handler.postDelayed(this, 15_000L);
         }
@@ -179,8 +170,8 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
             ChannelSubscriptions.clear();
             applySubscriptions(null);
         }
-        handler.removeCallbacks(progressTick);
-        handler.post(progressTick);
+        handler.removeCallbacks(timeTick);
+        handler.post(timeTick);
         if (inspectorLogos != null) {
             inspectorLogos.resume();
         }
@@ -199,7 +190,7 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
 
     @Override
     protected void onPause() {
-        handler.removeCallbacks(progressTick);
+        handler.removeCallbacks(timeTick);
         if (inspectorLogos != null) {
             inspectorLogos.pause();
         }
@@ -335,6 +326,10 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
         rail.setListener(new TvRail.Listener() {
             @Override
             public void onTabSelected(TvRail.Tab tab) {
+                if (tab == TvRail.Tab.GUIDE) {
+                    grid.requestFocus();
+                    return;
+                }
                 Shell.open(EpgActivity.this, tab);
             }
 
@@ -360,7 +355,7 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
         grid = new EpgGridView(this);
         grid.setId(View.generateViewId());
         grid.setPalette(Tv.BRAND, Tv.BRAND_BRIGHT, Tv.BG, Tv.BG_RAISED,
-                Tv.SURFACE, Tv.TEXT, Tv.TEXT_2);
+                Tv.SURFACE, Tv.SURFACE_2, Tv.TEXT, Tv.TEXT_2);
         grid.setListener(this);
 
         LinearLayout guideArea = new LinearLayout(this);
@@ -440,24 +435,8 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
         root.setBackgroundColor(Tv.BG_RAISED);
         root.setClickable(false);
 
-        LinearLayout track = new LinearLayout(this);
-        track.setOrientation(LinearLayout.HORIZONTAL);
-        track.setBackgroundColor(Tv.STROKE);
-        // The fill only ever gets the weights below; at 0 % it has zero width, so the
-        // magenta can never read as a completed programme.
-        progressFill = new View(this);
-        progressFill.setBackgroundColor(Tv.BRAND);
-        progressRest = new View(this);
-        progressRest.setBackgroundColor(0x00000000);
-        track.addView(progressFill, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.MATCH_PARENT, 0f));
-        track.addView(progressRest, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.MATCH_PARENT, 1f));
-        root.addView(track, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(3)));
-
         // The body is a frame so the state tag can sit at the top-right of the bar, on the
-        // same right edge as the NEXT column, without joining the channel identity row.
+        // same right edge as the NEXT column, without joining the programme copy.
         FrameLayout body = new FrameLayout(this);
         root.addView(body, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
@@ -465,11 +444,10 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
         LinearLayout bodyRow = new LinearLayout(this);
         bodyRow.setOrientation(LinearLayout.HORIZONTAL);
         bodyRow.setGravity(Gravity.CENTER_VERTICAL);
-        // 152 dp bar - 3 dp track = 149 dp of body. The poster is 112 dp, so 12 dp
-        // top/bottom leaves 13 dp of air and keeps the 200x112 artwork inside the bar
-        // without touching the screen edge.
+        // The 112 dp poster sits inside the 152 dp bar with generous air; there is no
+        // progress track and no channel identity row in this lower third.
         int bodyPadV = Math.min(12,
-                Math.max(0, (ON_AIR_HEIGHT_DP - ON_AIR_TRACK_DP - ON_AIR_POSTER_HEIGHT_DP) / 2));
+                Math.max(0, (ON_AIR_HEIGHT_DP - ON_AIR_POSTER_HEIGHT_DP) / 2));
         Tv.pad(bodyRow, 24, bodyPadV, 24, bodyPadV);
         body.addView(bodyRow, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -489,15 +467,10 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
         fallback.setOrientation(LinearLayout.VERTICAL);
         fallback.setGravity(Gravity.CENTER);
         fallback.setBackgroundColor(Tv.SURFACE_2);
-        posterNumber = Tv.numeral(this, 42f, Tv.BRAND);
-        posterNumber.setGravity(Gravity.CENTER);
-        fallback.addView(posterNumber);
-        TextView fallbackLabel = Tv.label(this, getString(R.string.channel_fallback), Tv.TEXT_3);
-        fallbackLabel.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams fallbackLabelLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        fallbackLabelLp.topMargin = dp(2);
-        fallback.addView(fallbackLabel, fallbackLabelLp);
+        ImageView fallbackIcon = Tv.icon(this, R.drawable.ic_tv, Tv.TEXT_3, 34f);
+        fallbackIcon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        fallback.addView(fallbackIcon, new LinearLayout.LayoutParams(
+                dp(34), dp(34)));
         posterFrame.addView(fallback, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         posterFallback = fallback;
@@ -521,23 +494,6 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
         channelLogo.setBackground(Tv.box(this, Tv.SURFACE, 4f, Tv.STROKE, 1f));
         channelLogo.setPadding(dp(5), dp(4), dp(5), dp(4));
         channelRow.addView(channelLogo, new LinearLayout.LayoutParams(dp(48), dp(30)));
-
-        channelNumber = Tv.numeral(this, 18f, Tv.BRAND_BRIGHT);
-        channelNumber.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams numberLp = new LinearLayout.LayoutParams(
-                dp(34), ViewGroup.LayoutParams.WRAP_CONTENT);
-        numberLp.leftMargin = dp(10);
-        channelRow.addView(channelNumber, numberLp);
-
-        LinearLayout channelNames = new LinearLayout(this);
-        channelNames.setOrientation(LinearLayout.VERTICAL);
-        channelNames.setGravity(Gravity.CENTER_VERTICAL);
-        channelName = Tv.displayText(this, 15f, Tv.TEXT);
-        channelName.setSingleLine(true);
-        channelName.setEllipsize(TextUtils.TruncateAt.END);
-        channelNames.addView(channelName);
-        channelRow.addView(channelNames, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         channelLock = new ImageView(this);
         channelLock.setImageResource(R.drawable.ic_lock);
@@ -684,7 +640,7 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         guide.addView(buildSkeletonChannelColumn(), new LinearLayout.LayoutParams(
-                dp(244), ViewGroup.LayoutParams.MATCH_PARENT));
+                dp(76), ViewGroup.LayoutParams.MATCH_PARENT));
         guide.addView(buildSkeletonTimeline(), new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
 
@@ -703,24 +659,16 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
         LinearLayout corner = new LinearLayout(this);
         corner.setGravity(Gravity.CENTER_VERTICAL);
         Tv.pad(corner, 12, 0, 12, 0);
-        corner.addView(Skeleton.line(this, 58f, 12f));
+        corner.addView(Skeleton.line(this, 40f, 12f));
         column.addView(corner, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(40)));
 
         for (int row = 0; row < GUIDE_SKELETON_ROWS; row++) {
             LinearLayout cell = new LinearLayout(this);
             cell.setOrientation(LinearLayout.HORIZONTAL);
-            cell.setGravity(Gravity.CENTER_VERTICAL);
-            Tv.pad(cell, 12, 0, 12, 0);
-            cell.addView(Skeleton.line(this, 22f, 12f));
-
-            LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(dp(48), dp(32));
-            logoLp.leftMargin = dp(8);
-            cell.addView(Skeleton.box(this, 48f, 32f, 5f), logoLp);
-
-            LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(0, dp(12), 1f);
-            nameLp.leftMargin = dp(9);
-            cell.addView(Skeleton.line(this, 0f, 12f), nameLp);
+            cell.setGravity(Gravity.CENTER);
+            cell.addView(Skeleton.box(this, 48f, 32f, 5f),
+                    new LinearLayout.LayoutParams(dp(48), dp(32)));
 
             column.addView(cell, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
@@ -771,9 +719,6 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
         bar.setOrientation(LinearLayout.VERTICAL);
         bar.setBackgroundColor(Tv.BG_RAISED);
 
-        bar.addView(Skeleton.line(this, 0f, 3f), new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(3)));
-
         FrameLayout body = new FrameLayout(this);
         bar.addView(body, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
@@ -782,7 +727,7 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
         bodyRow.setOrientation(LinearLayout.HORIZONTAL);
         bodyRow.setGravity(Gravity.CENTER_VERTICAL);
         int bodyPadV = Math.min(12,
-                Math.max(0, (ON_AIR_HEIGHT_DP - ON_AIR_TRACK_DP - ON_AIR_POSTER_HEIGHT_DP) / 2));
+                Math.max(0, (ON_AIR_HEIGHT_DP - ON_AIR_POSTER_HEIGHT_DP) / 2));
         Tv.pad(bodyRow, 24, bodyPadV, 24, bodyPadV);
         body.addView(bodyRow, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -802,12 +747,6 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
         ident.setGravity(Gravity.CENTER_VERTICAL);
         ident.addView(Skeleton.box(this, 48f, 30f, 4f),
                 new LinearLayout.LayoutParams(dp(48), dp(30)));
-        LinearLayout.LayoutParams numberLp = new LinearLayout.LayoutParams(dp(22), dp(12));
-        numberLp.leftMargin = dp(10);
-        ident.addView(Skeleton.line(this, 22f, 12f), numberLp);
-        LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(0, dp(12), 1f);
-        nameLp.leftMargin = dp(9);
-        ident.addView(Skeleton.line(this, 0f, 12f), nameLp);
         info.addView(ident);
 
         info.addView(skeletonLane(0.62f, 22f), skeletonLaneParams(10));
@@ -904,8 +843,6 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
         detailsRequest++;
 
         if (channel == null) {
-            setTextIfChanged(channelNumber, "—");
-            setTextIfChanged(channelName, "");
             channelLogo.setImageDrawable(null);
             channelLock.setVisibility(View.GONE);
             stateLabel.setVisibility(View.GONE);
@@ -915,20 +852,15 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
             setTextIfChanged(descriptionLabel, "");
             setTextIfChanged(nextTitle, "");
             setTextIfChanged(nextTime, "");
-            setTextIfChanged(posterNumber, "—");
             programmePoster.setVisibility(View.GONE);
             posterFallback.setVisibility(View.VISIBLE);
-            setProgressFraction(0f);
             return;
         }
 
         long now = System.currentTimeMillis();
         boolean locked = isLocked(channel);
-        setTextIfChanged(channelNumber, String.valueOf(channel.number));
-        setTextIfChanged(channelName, channel.title);
         channelLock.setVisibility(locked ? View.VISIBLE : View.GONE);
         refreshChannelLogo();
-        setTextIfChanged(posterNumber, String.valueOf(channel.number));
 
         stateLabel.setVisibility(View.VISIBLE);
         if (program == null) {
@@ -941,15 +873,18 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
             setTextIfChanged(nextTitle, "—");
             setTextIfChanged(nextTime, "");
             showPoster("");
-            setProgressFraction(0f);
             return;
         }
 
         boolean live = program.isLive(now);
         boolean past = program.endMs <= now;
+        boolean catchup = past && program.canCatchup(now);
         if (live) {
             setStateChip("live", getString(R.string.guide_live),
                     0xFFFFFFFF, R.drawable.bg_chip_live);
+        } else if (catchup) {
+            setStateChip("catchup", getString(R.string.badge_catchup),
+                    Tv.SUCCESS, R.drawable.bg_chip_catchup_available);
         } else if (past) {
             setStateChip("past", getString(R.string.guide_ended),
                     Tv.WARNING, R.drawable.bg_chip_catchup);
@@ -974,7 +909,6 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
             setTextIfChanged(nextTime, "");
         }
 
-        updateProgress(now);
         showPoster("");
         loadDetails(program);
     }
@@ -1096,40 +1030,6 @@ public final class EpgActivity extends BaseActivity implements EpgGridView.Liste
             programmePoster.setImageDrawable(null);
             posterFallback.setVisibility(View.VISIBLE);
         }
-    }
-
-    private void updateProgress(long now) {
-        if (focusedProgram == null) {
-            setProgressFraction(0f);
-            return;
-        }
-        float fraction;
-        if (focusedProgram.endMs <= now) {
-            fraction = 1f;
-        } else if (focusedProgram.startMs >= now) {
-            fraction = 0f;
-        } else {
-            fraction = focusedProgram.progress(now);
-        }
-        setProgressFraction(fraction);
-    }
-
-    private void setProgressFraction(float value) {
-        float fraction = Math.max(0f, Math.min(1f, value));
-        // Weight changes request a layout of the whole bar; a focus tick that lands on a
-        // programme with the same progress must not trigger one.
-        if (Math.abs(fraction - progressFraction) < 0.0005f) {
-            return;
-        }
-        progressFraction = fraction;
-        LinearLayout.LayoutParams fill = (LinearLayout.LayoutParams)
-                progressFill.getLayoutParams();
-        fill.weight = fraction;
-        progressFill.setLayoutParams(fill);
-        LinearLayout.LayoutParams rest = (LinearLayout.LayoutParams)
-                progressRest.getLayoutParams();
-        rest.weight = 1f - fraction;
-        progressRest.setLayoutParams(rest);
     }
 
     private void refreshChannelLogo() {

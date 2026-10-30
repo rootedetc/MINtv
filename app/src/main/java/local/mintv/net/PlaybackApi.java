@@ -190,8 +190,7 @@ public final class PlaybackApi {
         query.put("channel_number", Integer.toString(channel.getNumber()));
         JSONObject playinfo = bffGet("/player/playinfo/channel", query, STEP_LIVE);
 
-        JSONObject data = playinfo.optJSONObject("data");
-        JSONObject info = data == null ? null : data.optJSONObject("playBackInfoResponse");
+        JSONObject info = playBackInfo(playinfo);
         String type = info == null ? "live" : info.optString("type", "live");
         String mediaId = firstServiceMediaId(info);
         if (mediaId.isEmpty()) {
@@ -274,8 +273,7 @@ public final class PlaybackApi {
             throw catchupFailure(e, notAvailable);
         }
 
-        JSONObject data = response.optJSONObject("data");
-        JSONObject info = data == null ? null : data.optJSONObject("playBackInfoResponse");
+        JSONObject info = playBackInfo(response);
         if (info == null) {
             String serverMessage = serverMessage(response);
             Log.w(CATCHUP_TAG, "no playBackInfoResponse; server message=" + serverMessage);
@@ -333,8 +331,7 @@ public final class PlaybackApi {
             query.put("video_id", mediaId);
         }
         JSONObject response = bffGet("/player/playinfo/program", query, STEP_VOD);
-        JSONObject data = response.optJSONObject("data");
-        JSONObject info = data == null ? null : data.optJSONObject("playBackInfoResponse");
+        JSONObject info = playBackInfo(response);
         if (info == null) {
             throw new ApiException(ApiException.SERVER, serverMessage(response));
         }
@@ -386,8 +383,7 @@ public final class PlaybackApi {
         } catch (ApiException e) {
             throw catchupFailure(e, MSG_NOT_CATCHUP);
         }
-        JSONObject data = response.optJSONObject("data");
-        JSONObject info = data == null ? null : data.optJSONObject("playBackInfoResponse");
+        JSONObject info = playBackInfo(response);
         if (info == null) {
             throw new ApiException(ApiException.SERVER, MSG_NOT_CATCHUP);
         }
@@ -453,6 +449,25 @@ public final class PlaybackApi {
     }
 
     // ---------------------------------------------------------------- helpers
+
+    /**
+     * The player endpoints are not consistent about their envelope: live/program answers wrap
+     * the payload in {@code data}, while {@code /player/playinfo/catchup} puts
+     * {@code playBackInfoResponse} at the top level (verified against the live BFF on
+     * 2026-10-30). Accept both so a successful catch-up resolve is not mistaken for an
+     * entitlement failure.
+     */
+    private static JSONObject playBackInfo(JSONObject response) {
+        if (response == null) {
+            return null;
+        }
+        JSONObject info = response.optJSONObject("playBackInfoResponse");
+        if (info != null) {
+            return info;
+        }
+        JSONObject data = response.optJSONObject("data");
+        return data == null ? null : data.optJSONObject("playBackInfoResponse");
+    }
 
     /**
      * One authenticated player call through the shared BFF transport, so it carries exactly the

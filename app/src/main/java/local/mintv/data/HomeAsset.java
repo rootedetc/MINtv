@@ -16,7 +16,7 @@ import local.mintv.net.BffJson;
  * One card from a home rail, search result<br> or related feed.
  *
  * <p>All six specs read the same asset shape, so one tolerant model serves home, search,
- * watchlist and details rails. Fields absent from the response stay empty or zero; no caller may
+ * details rails. Fields absent from the response stay empty or zero; no caller may
  * assume one exists.</p>
  */
 public final class HomeAsset {

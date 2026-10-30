@@ -116,9 +116,13 @@ public final class EpgProgram {
         return catchup && endMs > 0 && endMs <= nowMs;
     }
 
-    /** True while the listing is on air and the backend allows starting it over. */
+    /**
+     * True while the listing is on air and the backend allows starting it over. The BFF sends
+     * this per listing as {@code entitlements.hasStartOver}; a live programme can be
+     * catch-up-enabled for later without being restartable now.
+     */
     public boolean canStartOver(long nowMs) {
-        return catchup && isLive(nowMs);
+        return catchup && hasStartOver && isLive(nowMs);
     }
 
     /**

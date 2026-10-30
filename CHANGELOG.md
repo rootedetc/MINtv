@@ -7,6 +7,36 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Catch-up playback** — `/player/playinfo/catchup` returns its `playBackInfoResponse` at the
+  top level, not inside `data`. The player was treating every successful catch-up resolve as an
+  entitlement failure; both envelopes are now accepted.
+- **Catch-up start position** — a catch-up asset is a rolling timeshift window, so Media3 joined
+  it near the live edge. Playback now starts at the listing's first frame (or at a saved
+  bookmark), which is what the native app does.
+- **Catch-up loading ident** — a VOD/catch-up launch without a channel identity reused the old
+  demo ident and printed “Javni DASH test · Unified Streaming”. It now shows the programme's own
+  title/subtitle and only tags OD POČETKA for replay. The unused public demo player and its
+  strings are gone.
+
+### Changed
+
+- **Guide** — ended listings now share the darkest block fill whether or not they can be
+  replayed; catch-up is carried by a small replay mark, a bright title and the OD POČETKA tag,
+  while an ended listing without catch-up keeps the dimmed title and PRETHODNO. Upcoming
+  listings use the lifted surface (`#191E26`) instead of the previous near-focus grey, so the
+  future half stays calm. Live stays the only magenta-tinted block.
+- **Guide layout** — the channel column shrank from 244dp to 76dp and now shows only the channel
+  logo; channel numbers and names are gone, leaving more of the day visible. The on-air
+  bar lost its progress bar, channel number and duplicate channel-name row; it now carries the
+  poster, programme title, metadata, synopsis and next programme only.
+- **Sidebar** — the source rail is now a fixed 96dp icon rail that never widens or paints labels
+  on focus. Choosing a destination selects it and moves focus into its content panel; choosing
+  the active destination returns focus to the content instead of parking it on the rail.
+- **My List removed** — the watchlist header action, Home rail, Settings shortcut and details
+  add/remove action are gone, along with the watchlist screen and data layer.
+
 ## [1.0.1] - 2026-10-30
 
 A polish and playback-reliability release: the player now reserves and releases its stream

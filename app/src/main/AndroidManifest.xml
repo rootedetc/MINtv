@@ -67,11 +67,6 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
-            android:name=".WatchlistActivity"
-            android:exported="false"
-            android:screenOrientation="landscape" />
-
-        <activity
             android:name=".ContinueWatchingActivity"
             android:exported="false"
             android:screenOrientation="landscape" />

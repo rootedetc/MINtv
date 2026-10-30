@@ -137,6 +137,9 @@ public final class PlaybackLauncher {
                 intent.putExtra(PlayerActivity.EXTRA_PROGRAMME_TITLE, program.title);
                 intent.putExtra(PlayerActivity.EXTRA_PROGRAMME_START, program.startMs);
                 intent.putExtra(PlayerActivity.EXTRA_PROGRAMME_END, program.endMs);
+                // Catch-up assets arrive as a timeshift window whose live edge is the end of
+                // the recording. Without an explicit start the player would join near the end.
+                intent.putExtra(PlayerActivity.EXTRA_START_AT_BEGINNING, true);
                 if (!startOver) {
                     ContinueWatchingItem resume = new BookmarkRepository(activity)
                             .resumeFor(program.id, program.catchupId);
@@ -237,6 +240,7 @@ public final class PlaybackLauncher {
                         intent.putExtra(PlayerActivity.EXTRA_RESUME_SECONDS, resumeSeconds);
                         intent.putExtra(PlayerActivity.EXTRA_CATCHUP_START, action.startUtc);
                         intent.putExtra(PlayerActivity.EXTRA_CATCHUP_END, action.endUtc);
+                        intent.putExtra(PlayerActivity.EXTRA_START_AT_BEGINNING, true);
                         activity.runOnUiThread(() -> activity.startActivity(intent));
                     }
 
@@ -275,6 +279,7 @@ public final class PlaybackLauncher {
                         intent.putExtra(PlayerActivity.EXTRA_RESUME_SECONDS, item.timeSeconds);
                         intent.putExtra(PlayerActivity.EXTRA_CATCHUP_START, item.startTime);
                         intent.putExtra(PlayerActivity.EXTRA_CATCHUP_END, item.endTime);
+                        intent.putExtra(PlayerActivity.EXTRA_START_AT_BEGINNING, true);
                         activity.runOnUiThread(() -> activity.startActivity(intent));
                     }
 

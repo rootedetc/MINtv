@@ -5,9 +5,8 @@ import android.content.Context;
 import local.mintv.R;
 import local.mintv.data.ContinueWatchingItem;
 import local.mintv.data.HomeAsset;
-import local.mintv.data.WatchlistItem;
 
-/** UI projection of the shared MAXtv asset shape used by home, search, watchlist and rails. */
+/** UI projection of the shared MAXtv asset shape used by home, search and rails. */
 public final class CardItem {
 
     public final String id;
@@ -84,55 +83,6 @@ public final class CardItem {
         return new CardItem(b);
     }
 
-    public static CardItem of(WatchlistItem item) {
-        return of(item, null);
-    }
-
-    /** Localized variant: the on-demand badge follows the active app language. */
-    public static CardItem of(WatchlistItem item, Context context) {
-        Builder b = new Builder();
-        if (item == null) {
-            return new CardItem(b);
-        }
-        String badge = context == null ? item.badge() : item.badge(context);
-        b.id = item.id;
-        b.programId = item.programId;
-        b.seriesId = item.seriesId;
-        b.title = item.displayTitle();
-        b.subtitle = meta(item, context);
-        b.badge = badge;
-        b.imageUrl = item.imageUrl;
-        b.deeplink = item.ctaDeeplink;
-        b.showType = item.showType;
-        b.contentType = item.contentType;
-        b.channelNumber = item.channelNumber;
-        b.runtimeSeconds = item.runtimeSeconds;
-        b.adult = item.isAdult;
-        b.channel = false;
-        b.series = item.isSeries();
-        b.source = item;
-        return new CardItem(b);
-    }
-
-    private static String meta(WatchlistItem item, Context context) {
-        String out = "";
-        if (item.releaseYear > 0) {
-            out = String.valueOf(item.releaseYear);
-        }
-        if (item.runtimeSeconds > 0) {
-            int minutes = Math.max(1, (int) (item.runtimeSeconds / 60));
-            String duration = context == null
-                    ? minutes + " min"
-                    : context.getString(R.string.meta_minutes, minutes);
-            out = out.isEmpty() ? duration : out + " · " + duration;
-        }
-        if (item.seasonNumber > 0) {
-            String season = "S" + item.seasonNumber
-                    + (item.episodeNumber > 0 ? " E" + item.episodeNumber : "");
-            out = out.isEmpty() ? season : out + " · " + season;
-        }
-        return out;
-    }
 
     public static CardItem of(ContinueWatchingItem item) {
         return of(item, null);

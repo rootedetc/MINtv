@@ -114,7 +114,7 @@ public final class EpgGridView extends View {
     private static final long SLOT_MS = 30L * 60L * 1000L;    // ruler tick / label spacing
     private static final int SLOT_COUNT = 49;                 // 00:00 .. 24:00 inclusive
 
-    private static final int CHANNEL_COLUMN_DP = 244;
+    private static final int CHANNEL_COLUMN_DP = 76;
     private static final int RULER_HEIGHT_DP = 40;
     private static final int ROW_HEIGHT_DP = 52;
 
@@ -125,17 +125,18 @@ public final class EpgGridView extends View {
     private static final int FOCUS_STROKE_DP = 2;
 
     private static final int CELL_PAD_DP = 12;
-    private static final int NUMBER_COLUMN_DP = 42;
     private static final int LOGO_WIDTH_DP = 48;
     private static final int LOGO_HEIGHT_DP = 32;
     private static final int LOGO_GAP_DP = 8;
-    private static final int TITLE_GAP_DP = 9;
     private static final int LOCK_CHIP_DP = 20;
     private static final int LOCK_GLYPH_DP = 12;
 
     private static final int NOW_LINE_DP = 2;
     private static final int PROGRESS_HEIGHT_DP = 3;
     private static final int PROGRESS_BOTTOM_DP = 5;
+    private static final int CATCHUP_GLYPH_DP = 10;
+    private static final int CATCHUP_GLYPH_GAP_DP = 5;
+    private static final int CATCHUP_GLYPH_MIN_BLOCK_DP = 56;
 
     // Baselines measured from the top of the programme block (52 dp row - 2 x 3 dp inset
     // = 46 dp). Barlow Condensed reports a full 1.0 em ascent, so hanging the time off the
@@ -150,7 +151,6 @@ public final class EpgGridView extends View {
 
     private static final float TITLE_SP = 14f;
     private static final float TIME_SP = 10.5f;
-    private static final float NUMBER_SP = 21f;
     private static final float CHANNEL_TITLE_SP = 13.5f;
     private static final float LOGO_NUMBER_SP = 12f;
     private static final float RULER_SP = 12f;
@@ -169,6 +169,7 @@ public final class EpgGridView extends View {
     private int backgroundColor = 0xFF07080B;
     private int raisedColor = 0xFF0B0D11;
     private int surfaceColor = 0xFF12151B;
+    private int surface2Color = 0xFF191E26;
     private int textPrimaryColor = 0xFFF4F6F9;
     private int textDimColor = 0xFFAEB6C2;
 
@@ -179,9 +180,9 @@ public final class EpgGridView extends View {
     private int rulerBackgroundColor;
     private int dividerColor;
     private int gridLineColor;
-    private int blockFillColor;
     private int blockLiveFillColor;
     private int blockPastFillColor;
+    private int blockUpcomingFillColor;
     private int blockFocusFillColor;
     private int channelFocusFillColor;
     private int placeholderColor;
@@ -216,8 +217,6 @@ public final class EpgGridView extends View {
     private final Paint logoPaint;
     private final Paint titlePaint;
     private final Paint timePaint;
-    private final Paint channelNumberPaint;
-    private final Paint channelTitlePaint;
     private final Paint logoNumberPaint;
     private final Paint rulerPaint;
     private final Paint rulerMinorPaint;
@@ -228,6 +227,8 @@ public final class EpgGridView extends View {
     private final Paint dashPaint;
     private final Drawable lockGlyph;
     private Bitmap lockBitmap;
+    private final Drawable catchupGlyph;
+    private Bitmap catchupBitmap;
 
     private final SimpleDateFormat timeFormatter;
     private final SimpleDateFormat dayFormatter;
@@ -293,15 +294,16 @@ public final class EpgGridView extends View {
     private float tickHeightPx;
     private float hairlineWidthPx;
     private float cellPadPx;
-    private float numberColumnPx;
     private float logoWidthPx;
     private float logoHeightPx;
     private float logoGapPx;
-    private float titleGapPx;
     private float dashHalfWidthPx;
     private float dashBaselineOffset;
     private float lockChipPx;
     private float lockGlyphPx;
+    private float catchupGlyphPx;
+    private float catchupGlyphGapPx;
+    private float catchupGlyphMinBlockPx;
 
     private final LruCache<EpgProgram, ProgramText> programTexts = new LruCache<>(4096);
     private final LruCache<EpgChannel, ChannelText> channelTexts = new LruCache<>(256);
@@ -372,10 +374,6 @@ public final class EpgGridView extends View {
 
         titlePaint = createTextPaint(TITLE_SP, local.mintv.ui.Tv.display(getContext()));
         timePaint = createTextPaint(TIME_SP, Typeface.DEFAULT);
-        channelNumberPaint = createTextPaint(NUMBER_SP,
-                local.mintv.ui.Tv.displayBold(getContext()));
-        channelTitlePaint = createTextPaint(CHANNEL_TITLE_SP,
-                local.mintv.ui.Tv.displayMedium(getContext()));
         logoNumberPaint = createTextPaint(LOGO_NUMBER_SP,
                 local.mintv.ui.Tv.displayBold(getContext()));
         rulerPaint = createTextPaint(RULER_SP, Typeface.DEFAULT);
@@ -388,6 +386,8 @@ public final class EpgGridView extends View {
                 local.mintv.ui.Tv.displayMedium(getContext()));
         Drawable glyph = getContext().getDrawable(R.drawable.ic_lock);
         lockGlyph = glyph == null ? null : glyph.mutate();
+        Drawable replay = getContext().getDrawable(R.drawable.ic_replay);
+        catchupGlyph = replay == null ? null : replay.mutate();
 
         blockRadiusPx = dp(BLOCK_RADIUS_DP);
         blockGapPx = dp(BLOCK_GAP_DP);
@@ -402,11 +402,9 @@ public final class EpgGridView extends View {
         tickHeightPx = dp(8f);
         hairlineWidthPx = Math.max(1f, dp(0.5f));
         cellPadPx = dp(CELL_PAD_DP);
-        numberColumnPx = dp(NUMBER_COLUMN_DP);
         logoWidthPx = dp(LOGO_WIDTH_DP);
         logoHeightPx = dp(LOGO_HEIGHT_DP);
         logoGapPx = dp(LOGO_GAP_DP);
-        titleGapPx = dp(TITLE_GAP_DP);
 
         titleBaselineOffset = dp(TITLE_BASELINE_DP);
         // Title ink 5.2-17.8 dp, time ink 22.7-32.1 dp, progress bar 38-41 dp: ~5 dp of
@@ -416,6 +414,9 @@ public final class EpgGridView extends View {
         dashBaselineOffset = -(dashPaint.ascent() + dashPaint.descent()) / 2f;
         lockChipPx = dp(LOCK_CHIP_DP);
         lockGlyphPx = dp(LOCK_GLYPH_DP);
+        catchupGlyphPx = dp(CATCHUP_GLYPH_DP);
+        catchupGlyphGapPx = dp(CATCHUP_GLYPH_GAP_DP);
+        catchupGlyphMinBlockPx = dp(CATCHUP_GLYPH_MIN_BLOCK_DP);
 
         emptyMessage = getContext().getString(R.string.guide_empty);
         nowLabel = getContext().getString(R.string.guide_now).toUpperCase(Locale.getDefault());
@@ -615,17 +616,18 @@ public final class EpgGridView extends View {
 
     /** Optional theming hook; all arguments are ARGB colours. */
     public void setPalette(int accent, int background, int surface, int textPrimary, int textDim) {
-        setPalette(accent, accent, background, background, surface, textPrimary, textDim);
+        setPalette(accent, accent, background, background, surface, surface, textPrimary, textDim);
     }
 
-    /** Full palette: brand, bright brand, ground, raised ruler, blocks, text. */
+    /** Full palette: brand, bright brand, ground, raised ruler, surface steps, text. */
     public void setPalette(int accent, int accentBright, int background, int raised,
-                           int surface, int textPrimary, int textDim) {
+                           int surface, int surface2, int textPrimary, int textDim) {
         accentColor = accent;
         accentBrightColor = accentBright;
         backgroundColor = background;
         raisedColor = raised;
         surfaceColor = surface;
+        surface2Color = surface2;
         textPrimaryColor = textPrimary;
         textDimColor = textDim;
         applyPalette();
@@ -779,9 +781,12 @@ public final class EpgGridView extends View {
         rulerBackgroundColor = raisedColor;
         dividerColor = blend(backgroundColor, 0xFFFFFFFF, 0.075f);
         gridLineColor = blend(backgroundColor, 0xFFFFFFFF, 0.045f);
-        blockFillColor = blend(backgroundColor, surfaceColor, 0.72f);
-        blockLiveFillColor = blend(blockFillColor, accentColor, 0.12f);
+        // Two quiet fills: an ended listing sits on the darkest step whether or not it can be
+        // replayed (the replay mark and OD POČETKA carry that state), while an upcoming listing
+        // is the one lifted surface. The live block keeps the magenta tint.
         blockPastFillColor = blend(backgroundColor, surfaceColor, 0.30f);
+        blockUpcomingFillColor = surface2Color;
+        blockLiveFillColor = blend(surfaceColor, accentColor, 0.14f);
         blockFocusFillColor = blend(surfaceColor, 0xFFFFFFFF, 0.16f);
         channelFocusFillColor = blend(surfaceColor, 0xFFFFFFFF, 0.08f);
         placeholderColor = blend(backgroundColor, 0xFFFFFFFF, 0.06f);
@@ -791,8 +796,6 @@ public final class EpgGridView extends View {
 
         titlePaint.setColor(textPrimaryColor);
         timePaint.setColor(textDimColor);
-        channelNumberPaint.setColor(accentBrightColor);
-        channelTitlePaint.setColor(textPrimaryColor);
         logoNumberPaint.setColor(textDimColor);
         rulerPaint.setColor(textDimColor);
         rulerMinorPaint.setColor(blend(textDimColor, backgroundColor, 0.42f));
@@ -804,7 +807,11 @@ public final class EpgGridView extends View {
         if (lockGlyph != null) {
             lockGlyph.setTint(textDimColor);
         }
+        if (catchupGlyph != null) {
+            catchupGlyph.setTint(textDimColor);
+        }
         rebuildLockBitmap();
+        rebuildCatchupBitmap();
     }
 
     /** Bakes the tiny vector lock once so the grid's onDraw never inflates a drawable. */
@@ -819,6 +826,23 @@ public final class EpgGridView extends View {
         lockGlyph.draw(canvas);
         Bitmap previous = lockBitmap;
         lockBitmap = bitmap;
+        if (previous != null && previous != bitmap) {
+            previous.recycle();
+        }
+    }
+
+    /** Bakes the small replay mark that tags a past listing playable from the start. */
+    private void rebuildCatchupBitmap() {
+        if (catchupGlyph == null || catchupGlyphPx <= 0f) {
+            return;
+        }
+        int size = Math.max(1, Math.round(catchupGlyphPx));
+        Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        catchupGlyph.setBounds(0, 0, size, size);
+        catchupGlyph.draw(canvas);
+        Bitmap previous = catchupBitmap;
+        catchupBitmap = bitmap;
         if (previous != null && previous != bitmap) {
             previous.recycle();
         }
@@ -954,14 +978,15 @@ public final class EpgGridView extends View {
                     continue;
                 }
 
-                boolean focused = rowFocused && index == focusProgramIndex;
-                drawProgramBlock(canvas, program, x1, x2, rowTop, focused, now);
+                boolean selected = rowFocused && index == focusProgramIndex;
+                drawProgramBlock(canvas, program, x1, x2, rowTop, selected, now);
             }
         }
     }
 
     private void drawProgramBlock(Canvas canvas, EpgProgram program, float x1, float x2,
-                                  float rowTop, boolean focused, long now) {
+                                  float rowTop, boolean selected, long now) {
+        boolean focused = selected && hasFocus();
         float left = x1 + blockGapPx;
         float right = x2 - blockGapPx;
         if (right <= left) {
@@ -973,15 +998,23 @@ public final class EpgGridView extends View {
 
         boolean live = program.isLive(now);
         boolean past = program.endMs <= now;
+        boolean catchup = past && program.canCatchup(now);
 
         blockRect.set(left, top, right, bottom);
-        fillPaint.setColor(focused
+        fillPaint.setColor(selected
                 ? blockFocusFillColor
-                : live ? blockLiveFillColor : past ? blockPastFillColor : blockFillColor);
+                : live ? blockLiveFillColor
+                : past ? blockPastFillColor : blockUpcomingFillColor);
         canvas.drawRoundRect(blockRect, blockRadiusPx, blockRadiusPx, fillPaint);
 
         float textLeft = left + blockTextPadPx;
         float textRight = right - blockTextPadPx;
+        boolean showCatchupMark = catchup && catchupBitmap != null
+                && catchupBitmap.getWidth() > 0
+                && right - left >= catchupGlyphMinBlockPx;
+        if (showCatchupMark) {
+            textRight -= catchupGlyphPx + catchupGlyphGapPx;
+        }
         // A block that runs past the right edge of the visible window is clipped by the
         // grid canvas. Ellipsize against the visible part as well, so that the last column
         // ends with an ellipsis instead of a glyph cut in half by the grid border.
@@ -992,10 +1025,11 @@ public final class EpgGridView extends View {
         float available = textRight - textLeft;
         if (available > dp(18f)) {
             ProgramText text = programText(program, available);
-            titlePaint.setColor(focused ? 0xFFFFFFFF
-                    : past ? textPastColor : textPrimaryColor);
-            timePaint.setColor(focused ? 0xFFE9D4DF
-                    : past ? blend(textPastColor, backgroundColor, 0.2f) : textDimColor);
+            boolean dim = past && !catchup;
+            titlePaint.setColor(selected ? 0xFFFFFFFF
+                    : dim ? textPastColor : textPrimaryColor);
+            timePaint.setColor(selected ? 0xFFE9D4DF
+                    : dim ? blend(textPastColor, backgroundColor, 0.2f) : textDimColor);
             // Canvas text is never allowed outside the block that owns it: the ellipsis
             // math keeps it inside, the clip guarantees it even if a glyph overhangs its
             // advance or the font falls back to a wider face.
@@ -1006,6 +1040,13 @@ public final class EpgGridView extends View {
                 canvas.drawText(text.time, textLeft, top + timeBaselineOffset, timePaint);
             }
             canvas.restore();
+        }
+
+        if (showCatchupMark) {
+            // A quiet replay mark, matching the native guide's catch-up indicator. The shade
+            // already says "available"; the mark keeps the meaning when colour is not enough.
+            canvas.drawBitmap(catchupBitmap,
+                    right - blockTextPadPx - catchupGlyphPx, top + dp(4f), logoPaint);
         }
 
         if (live && right - left > dp(14f)) {
@@ -1109,9 +1150,6 @@ public final class EpgGridView extends View {
         canvas.clipRect(0, rulerHeightPx, channelColumnW, viewContentH);
         canvas.translate(0f, rulerHeightPx - scrollYPx);
 
-        float titleLeft = cellPadPx + numberColumnPx + logoGapPx + logoWidthPx + titleGapPx;
-        float titleWidth = Math.max(0f, channelColumnW - titleLeft - cellPadPx);
-
         for (int row = firstRow; row <= lastRow; row++) {
             float top = row * (float) rowHeightPx;
             boolean focused = row == focusRow;
@@ -1126,7 +1164,7 @@ public final class EpgGridView extends View {
                         Math.max(2f, dp(3f)), top + rowHeightPx - dp(4f), fillPaint);
             }
 
-            drawChannelCell(canvas, channels.get(row), top, titleLeft, titleWidth);
+            drawChannelCell(canvas, channels.get(row), top);
 
             hairlinePaint.setColor(dividerColor);
             canvas.drawRect(0f, top + rowHeightPx - hairlineWidthPx,
@@ -1136,25 +1174,13 @@ public final class EpgGridView extends View {
         canvas.restore();
     }
 
-    private void drawChannelCell(Canvas canvas, EpgChannel channel, float rowTop,
-                                 float titleLeft, float titleWidth) {
+    private void drawChannelCell(Canvas canvas, EpgChannel channel, float rowTop) {
         float centerY = rowTop + rowHeightPx / 2f;
         boolean locked = isLocked(channel);
-        ChannelText text = channelText(channel, titleWidth);
-        boolean focused = ((int) (rowTop / rowHeightPx)) == focusRow;
-        channelNumberPaint.setColor(focused ? accentBrightColor : textDimColor);
+        ChannelText text = channelText(channel);
 
-        float numberX = Math.max(cellPadPx,
-                cellPadPx + numberColumnPx - text.numberWidthPx);
-        float numberBaseline = centerY - (channelNumberPaint.ascent()
-                + channelNumberPaint.descent()) / 2f;
-        canvas.save();
-        canvas.clipRect(cellPadPx, rowTop,
-                cellPadPx + numberColumnPx + dp(1f), rowTop + rowHeightPx);
-        canvas.drawText(text.number, numberX, numberBaseline, channelNumberPaint);
-        canvas.restore();
-
-        float logoLeft = cellPadPx + numberColumnPx + logoGapPx;
+        float logoLeft = Math.max(cellPadPx,
+                (channelColumnW - logoWidthPx) / 2f);
         float logoTop = centerY - logoHeightPx / 2f;
         rectF.set(logoLeft, logoTop, logoLeft + logoWidthPx, logoTop + logoHeightPx);
         fillPaint.setColor(placeholderColor);
@@ -1187,19 +1213,6 @@ public final class EpgGridView extends View {
 
         if (locked) {
             drawLockChip(canvas, logoLeft + logoWidthPx + dp(2f), logoTop - dp(2f));
-        }
-
-        if (text.title.length() > 0) {
-            channelTitlePaint.setColor(((int) (rowTop / rowHeightPx)) == focusRow
-                    ? 0xFFFFFFFF : textPrimaryColor);
-            float titleBaseline = centerY - (channelTitlePaint.ascent()
-                    + channelTitlePaint.descent()) / 2f;
-            // Keep the name out of the column hairline even when a glyph overhangs the
-            // width returned by measureText().
-            canvas.save();
-            canvas.clipRect(titleLeft, rowTop, titleLeft + titleWidth, rowTop + rowHeightPx);
-            canvas.drawText(text.title, titleLeft, titleBaseline, channelTitlePaint);
-            canvas.restore();
         }
     }
 
@@ -1278,20 +1291,15 @@ public final class EpgGridView extends View {
         return created;
     }
 
-    private ChannelText channelText(EpgChannel channel, float maxWidth) {
+    private ChannelText channelText(EpgChannel channel) {
         ChannelText cached = channelTexts.get(channel);
-        if (cached != null && Math.abs(cached.maxWidth - maxWidth) < 1f) {
+        if (cached != null) {
             return cached;
         }
         String number = channel.number >= 0 ? String.valueOf(channel.number) : "–";
-        String raw = channel.title == null ? "" : channel.title
-                .replace('\n', ' ').replace('\r', ' ').trim();
         ChannelText created = new ChannelText(
                 number,
-                channelNumberPaint.measureText(number),
-                logoNumberPaint.measureText(number),
-                ellipsize(channelTitlePaint, raw, maxWidth),
-                maxWidth);
+                logoNumberPaint.measureText(number));
         channelTexts.put(channel, created);
         return created;
     }
@@ -1983,18 +1991,11 @@ public final class EpgGridView extends View {
 
     private static final class ChannelText {
         final String number;
-        final float numberWidthPx;
         final float logoNumberWidthPx;
-        final String title;
-        final float maxWidth;
 
-        ChannelText(String number, float numberWidthPx, float logoNumberWidthPx,
-                    String title, float maxWidth) {
+        ChannelText(String number, float logoNumberWidthPx) {
             this.number = number;
-            this.numberWidthPx = numberWidthPx;
             this.logoNumberWidthPx = logoNumberWidthPx;
-            this.title = title;
-            this.maxWidth = maxWidth;
         }
     }
 

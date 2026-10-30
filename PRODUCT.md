@@ -39,7 +39,7 @@ A private, telemetry-free MAXtv client whose EPG is the front door rather than a
 - Channel switching from the player's channel switcher (UP/OK or CH+/CH−); no picture-interrupting zapping.
 - Quality preference: Auto / Max / 720p, applied immediately without re-tuning; the player readout reports the actual produced resolution (e.g. 1080p or 720p).
 - Player settings: quality, subtitle and audio-language selection live in the bottom overlay; the channel switcher carries no quality control.
-- Home rails, Watchlist, Continue Watching, favourite channels/custom order, Search and content details are implemented from the six feature specs. Rentals, recordings, parental PIN, multi-day EPG and programme notifications remain out of scope.
+- Home rails, Continue Watching, favourite channels/custom order, Search and content details are implemented from the six feature specs. Rentals, recordings, parental PIN, multi-day EPG and programme notifications remain out of scope.
 - No phone layout ships. The app is landscape TV only.
 
 ## Brand Commitments

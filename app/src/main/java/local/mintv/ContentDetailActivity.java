@@ -28,7 +28,6 @@ import local.mintv.data.ChannelRepository;
 import local.mintv.data.ContentDetailRepository;
 import local.mintv.data.HomeRailFeed;
 import local.mintv.data.Session;
-import local.mintv.data.WatchlistRepository;
 import local.mintv.details.ActionSet;
 import local.mintv.details.BookmarkInfo;
 import local.mintv.details.Episode;
@@ -62,7 +61,6 @@ public final class ContentDetailActivity extends BaseActivity {
 
     private ShellHost host;
     private ContentDetailRepository repository;
-    private WatchlistRepository watchlistRepository;
 
     private ScrollView scroll;
     private LinearLayout contentHost;
@@ -86,8 +84,6 @@ public final class ContentDetailActivity extends BaseActivity {
     private ProgramDetail program;
     private SeriesDetail series;
     private ActionSet actions;
-    private boolean pinned;
-    private boolean pinnedKnown;
     private int generation;
     private Season selectedSeason;
 
@@ -115,7 +111,6 @@ public final class ContentDetailActivity extends BaseActivity {
         host = new ShellHost(this, tab);
         setContentView(host.root);
         repository = new ContentDetailRepository(this);
-        watchlistRepository = new WatchlistRepository(this);
         buildUi();
         load();
     }
@@ -129,8 +124,6 @@ public final class ContentDetailActivity extends BaseActivity {
             loadActions(generation);
         } else if (!signedIn && actions != null) {
             actions = null;
-            pinned = false;
-            pinnedKnown = false;
             renderActions();
         }
     }
@@ -423,25 +416,16 @@ public final class ContentDetailActivity extends BaseActivity {
         actionsHost.addView(watch, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, Tv.dp(this, 50)));
 
-        if (signedIn && pinnedKnown) {
-            TextView pin = Tv.ghost(this, pinned
-                    ? getString(R.string.details_watchlist_remove)
-                    : getString(R.string.details_watchlist_add));
-            pin.setOnClickListener(view -> togglePinned(pin));
-            LinearLayout.LayoutParams pinLp = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, Tv.dp(this, 46));
-            pinLp.leftMargin = Tv.dp(this, 10);
-            actionsHost.addView(pin, pinLp);
-
+        if (signedIn) {
             if (actions != null && actions.hasTrailer()) {
                 TextView trailer = Tv.ghost(this, getString(R.string.details_trailer));
                 trailer.setOnClickListener(view -> playTrailer());
                 LinearLayout.LayoutParams trailerLp = new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.WRAP_CONTENT, Tv.dp(this, 46));
-                trailerLp.leftMargin = Tv.dp(this, 8);
+                trailerLp.leftMargin = Tv.dp(this, 10);
                 actionsHost.addView(trailer, trailerLp);
             }
-        } else if (!signedIn) {
+        } else {
             TextView signIn = Tv.ghost(this, getString(R.string.settings_account_sign_in));
             signIn.setId(View.generateViewId());
             signIn.setOnClickListener(view -> startActivity(new Intent(this, LoginActivity.class)));
@@ -714,8 +698,6 @@ public final class ContentDetailActivity extends BaseActivity {
                     return;
                 }
                 actions = loaded;
-                pinned = loaded.pinned;
-                pinnedKnown = true;
                 renderActions();
             }
 
@@ -759,42 +741,6 @@ public final class ContentDetailActivity extends BaseActivity {
                         relatedSection.setVisibility(View.GONE);
                     }
                 });
-    }
-
-    private void togglePinned(TextView button) {
-        boolean next = !pinned;
-        button.setText(getString(next ? R.string.details_watchlist_remove
-                : R.string.details_watchlist_add));
-        button.setEnabled(false);
-        String type = isSeries ? "series" : "program";
-        Background.run(() -> {
-            if (next) {
-                watchlistRepository.add(id, type);
-            } else {
-                watchlistRepository.remove(id, type);
-            }
-            return next;
-        }, new Background.Result<Boolean>() {
-            @Override
-            public void onSuccess(Boolean value) {
-                pinned = value;
-                pinnedKnown = true;
-                button.setEnabled(true);
-                renderActions();
-                Toast.makeText(ContentDetailActivity.this,
-                        getString(pinned ? R.string.details_watchlist_added
-                                : R.string.details_watchlist_removed),
-                        Toast.LENGTH_SHORT).show();
-            }
-
-            @Override
-            public void onError(ApiException error) {
-                button.setEnabled(true);
-                renderActions();
-                Toast.makeText(ContentDetailActivity.this,
-                        String.valueOf(error.getMessage()), Toast.LENGTH_LONG).show();
-            }
-        });
     }
 
     private void playPrimary() {

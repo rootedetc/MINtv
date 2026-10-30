@@ -41,8 +41,6 @@ import local.mintv.data.HomeRailFeed;
 import local.mintv.data.HomeRepository;
 import local.mintv.data.Highlight;
 import local.mintv.data.Session;
-import local.mintv.data.WatchlistItem;
-import local.mintv.data.WatchlistRepository;
 import local.mintv.epg.EpgCache;
 import local.mintv.epg.EpgChannel;
 import local.mintv.epg.EpgProgram;
@@ -61,9 +59,9 @@ import local.mintv.ui.Tv;
 import local.mintv.ui.TvRail;
 
 /**
- * Server-driven home rails: hero, editorial rails, continue watching, watchlist, favourite
- * channels and on-now. Rails are fetched independently so the first one paints without waiting
- * for all fifteen.
+ * Server-driven home rails: hero, editorial rails, continue watching, favourite channels and
+ * on-now. Rails are fetched independently so the first one paints without waiting for all
+ * fifteen.
  */
 public final class HomeActivity extends BaseActivity {
 
@@ -100,7 +98,6 @@ public final class HomeActivity extends BaseActivity {
 
     private ShellHost host;
     private HomeRepository repository;
-    private WatchlistRepository watchlistRepository;
     private BookmarkRepository bookmarkRepository;
     private AccountChannelRepository channelRepository;
 
@@ -108,7 +105,6 @@ public final class HomeActivity extends BaseActivity {
     private LinearLayout rails;
     private LinearLayout categoriesRow;
     private TextView subtitle;
-    private TextView listAction;
     private View refreshAction;
     private View headerView;
     private View heroView;
@@ -139,7 +135,6 @@ public final class HomeActivity extends BaseActivity {
         host = new ShellHost(this, TvRail.Tab.HOME);
         setContentView(host.root);
         repository = new HomeRepository(this);
-        watchlistRepository = new WatchlistRepository(this);
         bookmarkRepository = new BookmarkRepository(this);
         channelRepository = new AccountChannelRepository(this);
 
@@ -166,14 +161,6 @@ public final class HomeActivity extends BaseActivity {
         LinearLayout header = host.header(getString(R.string.nav_home),
                 getString(R.string.home_subtitle));
         headerView = header;
-        TextView list = host.action(getString(R.string.watchlist_title));
-        listAction = list;
-        list.setOnClickListener(view -> startActivity(new Intent(this, WatchlistActivity.class)));
-        LinearLayout.LayoutParams listLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, Tv.dp(this, 44));
-        listLp.rightMargin = Tv.dp(this, 8);
-        list.setVisibility(Session.get(this).isLoggedIn() ? View.VISIBLE : View.GONE);
-        header.addView(list, listLp);
         FrameLayout refresh = new FrameLayout(this);
         refresh.setBackgroundResource(R.drawable.bg_button_ghost);
         refresh.setFocusable(true);
@@ -219,6 +206,13 @@ public final class HomeActivity extends BaseActivity {
                 Gravity.CENTER));
 
         host.rail.setContentFocusTarget(scroll);
+        host.setContentFocus(() -> {
+            if (primaryFocusTarget != null && primaryFocusTarget.isShown()) {
+                primaryFocusTarget.requestFocus();
+            } else {
+                focusSelectedCategory();
+            }
+        });
     }
 
     private void showFirstLoadSkeleton() {
@@ -461,12 +455,11 @@ public final class HomeActivity extends BaseActivity {
                 addHero(component);
             } else if (component.requiresAuth() && !loggedIn) {
                 continue;
-            } else if (component.isRentals() || component.isRecording()) {
+            } else if (component.isRentals() || component.isRecording()
+                    || component.isWatchlist()) {
                 continue;
             } else if (component.isContinueWatching()) {
                 addContinueWatching(component);
-            } else if (component.isWatchlist()) {
-                addWatchlist(component);
             } else if (component.isFavouriteChannels()) {
                 addFavourites(component);
             } else if (component.isOnNow()) {
@@ -803,35 +796,6 @@ public final class HomeActivity extends BaseActivity {
         });
     }
 
-    private void addWatchlist(HomeComponent component) {
-        if (!Session.get(this).isLoggedIn()) {
-            return;
-        }
-        LinearLayout section = addSection(component.title, component, true);
-        ProgramAdapter adapter = addRailContent(section);
-        int gen = generation;
-        Background.run(() -> watchlistRepository.loadAll(),
-                new Background.Result<List<WatchlistItem>>() {
-                    @Override
-                    public void onSuccess(List<WatchlistItem> items) {
-                        if (gen != generation) {
-                            return;
-                        }
-                        List<CardItem> cards = new ArrayList<>();
-                        for (WatchlistItem item : items) {
-                            cards.add(CardItem.of(item, HomeActivity.this));
-                        }
-                        submitRail(section, adapter, cards);
-                        focusFirstCard(section);
-                    }
-
-                    @Override
-                    public void onError(ApiException error) {
-                        hideSection(section);
-                    }
-                });
-    }
-
     private void addFavourites(HomeComponent component) {
         if (!Session.get(this).isLoggedIn()) {
             return;
@@ -942,7 +906,7 @@ public final class HomeActivity extends BaseActivity {
         header.addView(heading, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        if (showMore || component.isWatchlist() || component.isContinueWatching()
+        if (showMore || component.isContinueWatching()
                 || component.isFavouriteChannels()) {
             TextView more = Tv.ghost(this, getString(R.string.home_show_more));
             more.setOnClickListener(view -> showMore(component));
@@ -1033,10 +997,6 @@ public final class HomeActivity extends BaseActivity {
     }
 
     private void showMore(HomeComponent component) {
-        if (component.isWatchlist()) {
-            startActivity(new Intent(this, WatchlistActivity.class));
-            return;
-        }
         if (component.isContinueWatching()) {
             startActivity(new Intent(this, ContinueWatchingActivity.class));
             return;
@@ -1153,9 +1113,6 @@ public final class HomeActivity extends BaseActivity {
     }
 
     private void focusHeaderAction() {
-        if (listAction != null && listAction.isShown() && listAction.requestFocus()) {
-            return;
-        }
         if (refreshAction != null && refreshAction.isShown()) {
             refreshAction.requestFocus();
         }
@@ -1221,10 +1178,6 @@ public final class HomeActivity extends BaseActivity {
             DeepLinks.openAsset(this, (HomeAsset) source);
             return;
         }
-        if (source instanceof WatchlistItem) {
-            DeepLinks.openWatchlistItem(this, (WatchlistItem) source);
-            return;
-        }
         if (source instanceof ContinueWatchingItem) {
             DeepLinks.openContinueWatching(this, (ContinueWatchingItem) source);
             return;
@@ -1252,14 +1205,8 @@ public final class HomeActivity extends BaseActivity {
             }
             host.rail.setAccount(TextUtils.isEmpty(name)
                     ? getString(R.string.nav_settings) : name, true);
-            if (listAction != null) {
-                listAction.setVisibility(View.VISIBLE);
-            }
         } else {
             host.rail.setAccount(getString(R.string.action_sign_in), false);
-            if (listAction != null) {
-                listAction.setVisibility(View.GONE);
-            }
         }
     }
 

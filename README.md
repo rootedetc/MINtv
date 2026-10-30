@@ -47,12 +47,12 @@ and the MAXtv catalogue text left in Croatian, as the service returns it.</sub>
 ### Browsing
 
 - **Home rails** — the server-driven MAXtv home page: hero highlights, editorial rails
-  (series, films, kids, sport), continue watching, your list, favourite channels and on-now,
-  with "show more" grids behind each rail.
+  (series, films, kids, sport), continue watching, favourite channels and on-now, with
+  "show more" grids behind each rail.
 - **Search** — films, series, people and channels, split across filters, with a local
   recent-search history and the same detail cards as the rest of the app.
-- **Watchlist / Continue Watching** — add from details, resume a catch-up item, and remove
-  with TV-style multi-select.
+- **Continue Watching** — resume a catch-up item, and remove entries with TV-style
+  multi-select.
 - **Content details** — programme and series metadata, actions, seasons and episodes, cast
   and related content, all reachable from the rails, search and the guide.
 - **Guide (EPG)** — a TiviMate-style grid: 247 channels, a full day of programmes, day ruler,

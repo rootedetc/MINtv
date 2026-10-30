@@ -248,6 +248,7 @@ public final class SearchActivity extends BaseActivity {
                 Gravity.CENTER));
 
         host.rail.setContentFocusTarget(search);
+        host.setContentFocus(search::requestFocus);
     }
 
     private void updateAccount() {

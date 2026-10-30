@@ -141,9 +141,10 @@ public final class TuneIdent extends FrameLayout {
             channelName.setText(channel.getTitle(getContext()));
         } else {
             ghostNumber.setText("");
-            channelName.setText(R.string.player_demo_title);
+            channelName.setText(R.string.player_title_fallback);
         }
         programme.setText(programmeTitle == null ? "" : programmeTitle);
+        status.setVisibility(View.VISIBLE);
         status.setText(live ? R.string.player_live : R.string.player_time_shift);
         status.setBackground(Tv.box(getContext(), live ? Tv.BRAND : 0xFF8A5A18,
                 4f, 0, 0f));
@@ -151,13 +152,20 @@ public final class TuneIdent extends FrameLayout {
         show();
     }
 
-    public void showDemo(String title) {
+    /**
+     * Loading ident for VOD / catch-up media without a channel identity. The title and
+     * subtitle come from the actual intent; only a catch-up/replay launch gets the
+     * OD POČETKA tag. Nothing here mentions the demo stream.
+     */
+    public void showMedia(String title, String subtitle, boolean replay) {
         ghostNumber.setText("");
-        channelName.setText(title);
-        programme.setText(R.string.player_demo_subtitle);
-        status.setText(R.string.player_tune_ready);
-        status.setBackground(Tv.box(getContext(), Tv.SURFACE_2, 4f,
-                Tv.STROKE_STRONG, 1f));
+        channelName.setText(title == null ? "" : title);
+        programme.setText(subtitle == null ? "" : subtitle);
+        status.setVisibility(replay ? View.VISIBLE : View.GONE);
+        if (replay) {
+            status.setText(R.string.player_time_shift);
+            status.setBackground(Tv.box(getContext(), 0xFF8A5A18, 4f, 0, 0f));
+        }
         kicker.setText(R.string.player_tune_connecting);
         show();
     }

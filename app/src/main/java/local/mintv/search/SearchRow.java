@@ -4,7 +4,6 @@ import android.content.Context;
 
 import local.mintv.R;
 import local.mintv.data.HomeAsset;
-import local.mintv.data.WatchlistItem;
 
 import java.util.List;
 

@@ -110,6 +110,10 @@ public final class SettingsActivity extends BaseActivity {
         rail.setListener(new TvRail.Listener() {
             @Override
             public void onTabSelected(TvRail.Tab tab) {
+                if (tab == TvRail.Tab.SETTINGS) {
+                    categories.get(section).requestFocus();
+                    return;
+                }
                 Shell.open(SettingsActivity.this, tab);
             }
 
@@ -328,18 +332,11 @@ public final class SettingsActivity extends BaseActivity {
         if (signedIn) {
             LinearLayout library = new LinearLayout(this);
             library.setOrientation(LinearLayout.HORIZONTAL);
-            TextView watchlist = Tv.ghost(this, getString(R.string.watchlist_title));
-            watchlist.setOnClickListener(view -> startActivity(
-                    new Intent(this, WatchlistActivity.class)));
-            library.addView(watchlist, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, Tv.dp(this, 46)));
             TextView continueWatching = Tv.ghost(this, getString(R.string.cw_title));
-            LinearLayout.LayoutParams cwLp = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, Tv.dp(this, 46));
-            cwLp.leftMargin = Tv.dp(this, 10);
             continueWatching.setOnClickListener(view -> startActivity(
                     new Intent(this, ContinueWatchingActivity.class)));
-            library.addView(continueWatching, cwLp);
+            library.addView(continueWatching, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, Tv.dp(this, 46)));
             contentHost.addView(library, topMargin(10));
         }
 

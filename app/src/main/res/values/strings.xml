@@ -107,8 +107,6 @@
     <string name="settings_about_privacy">Bez analitike, oglasa i telemetrije.</string>
     <string name="settings_about_vpn">MAXtv ne radi preko VPN-a. Isključi VPN prije gledanja.</string>
     <string name="settings_about_data">Podaci: MAXtv kanali i EPG. Reprodukcija: Media3 i Widevine.</string>
-    <string name="settings_about_demo">Probna reprodukcija</string>
-    <string name="settings_about_demo_body">Javni DASH test za provjeru reprodukcije.</string>
     <string name="settings_about_built">Napravljeno za jedno kućanstvo.</string>
 
     <!-- Login -->
@@ -145,8 +143,6 @@
     <string name="player_error_generic">Stream se ne može otvoriti. Pokušaj ponovno.</string>
     <string name="player_seek_back">−10 s</string>
     <string name="player_seek_forward">+10 s</string>
-    <string name="player_demo_title">Tears of Steel</string>
-    <string name="player_demo_subtitle">Javni DASH test · Unified Streaming</string>
     <string name="player_channel_subtitle">Kanal %1$d · %2$s</string>
     <string name="player_tune_starting">Povezivanje…</string>
     <string name="player_tune_live">UŽIVO</string>
@@ -313,7 +309,7 @@
 
     <!-- Home rails -->
     <string name="home_title">Početna</string>
-    <string name="home_subtitle">Preporuke, nastavak gledanja i tvoja lista</string>
+    <string name="home_subtitle">Preporuke i nastavak gledanja</string>
     <string name="home_show_more">PRIKAŽI VIŠE</string>
     <string name="home_empty">Nema sadržaja za prikaz.</string>
     <string name="home_error">Preporuke nisu dostupne</string>

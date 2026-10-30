@@ -102,8 +102,6 @@
     <string name="settings_about_privacy">No analytics, ads, or telemetry.</string>
     <string name="settings_about_vpn">MAXtv does not work over VPN. Turn off VPN before watching.</string>
     <string name="settings_about_data">Data: MAXtv channels and EPG. Playback: Media3 and Widevine.</string>
-    <string name="settings_about_demo">Test player</string>
-    <string name="settings_about_demo_body">Public DASH test for checking playback.</string>
     <string name="settings_about_built">Built for one household.</string>
 
     <string name="login_title">Sign in to MAXtv</string>
@@ -138,8 +136,6 @@
     <string name="player_error_generic">The stream could not be opened. Try again.</string>
     <string name="player_seek_back">−10 s</string>
     <string name="player_seek_forward">+10 s</string>
-    <string name="player_demo_title">Tears of Steel</string>
-    <string name="player_demo_subtitle">Public DASH test · Unified Streaming</string>
     <string name="player_channel_subtitle">Channel %1$d · %2$s</string>
     <string name="player_tune_starting">Connecting…</string>
     <string name="player_tune_live">LIVE</string>
@@ -299,7 +295,7 @@
 
     <!-- Home rails -->
     <string name="home_title">Home</string>
-    <string name="home_subtitle">Recommendations, continue watching and your list</string>
+    <string name="home_subtitle">Recommendations and continue watching</string>
     <string name="home_show_more">SHOW MORE</string>
     <string name="home_empty">Nothing to show.</string>
     <string name="home_error">Recommendations are unavailable</string>

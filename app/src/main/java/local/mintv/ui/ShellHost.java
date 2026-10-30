@@ -13,7 +13,7 @@ import local.mintv.R;
 /**
  * Shared chrome for the feature surfaces: the permanent source rail plus a content column with
  * the Broadcast Rail header. Existing screens keep their bespoke headers; the new home, search,
- * watchlist, continue-watching, details and subpage screens use this to stay identical.
+ * continue-watching, details and subpage screens use this to stay identical.
  */
 public final class ShellHost {
 
@@ -21,6 +21,7 @@ public final class ShellHost {
     public final TvRail rail;
     public final LinearLayout content;
     private final Activity activity;
+    private Runnable contentFocus;
 
     public ShellHost(Activity activity, TvRail.Tab active) {
         this.activity = activity;
@@ -49,7 +50,9 @@ public final class ShellHost {
             @Override
             public void onTabSelected(TvRail.Tab tab) {
                 if (tab == active) {
-                    rail.item(tab).requestFocus();
+                    // Native rail behaviour: the destination is already selected, so a click
+                    // sends focus into its content instead of parking it on the rail.
+                    focusContent();
                     return;
                 }
                 Shell.open(activity, tab);
@@ -67,6 +70,41 @@ public final class ShellHost {
         content.setOrientation(LinearLayout.VERTICAL);
         shell.addView(content, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+    }
+
+    /**
+     * Registers the control that should receive focus when the rail's active destination is
+     * chosen again. Each screen knows its own primary control; the rail does not guess.
+     */
+    public void setContentFocus(Runnable focus) {
+        this.contentFocus = focus;
+    }
+
+    /** Move focus from the rail into the screen's main panel. */
+    public void focusContent() {
+        if (contentFocus != null) {
+            contentFocus.run();
+            return;
+        }
+        if (!focusFirst(content)) {
+            content.requestFocus();
+        }
+    }
+
+    private static boolean focusFirst(ViewGroup parent) {
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            View child = parent.getChildAt(i);
+            if (child == null || child.getVisibility() != View.VISIBLE) {
+                continue;
+            }
+            if (child.isFocusable() && child.requestFocus()) {
+                return true;
+            }
+            if (child instanceof ViewGroup && focusFirst((ViewGroup) child)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public LinearLayout header(String title, String subtitle) {

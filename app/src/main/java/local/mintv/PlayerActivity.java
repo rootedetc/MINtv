@@ -118,10 +118,8 @@ public final class PlayerActivity extends BaseActivity {
     public static final String EXTRA_RESUME_SECONDS = "local.mintv.extra.RESUME_SECONDS";
     public static final String EXTRA_CATCHUP_START = "local.mintv.extra.CATCHUP_START";
     public static final String EXTRA_CATCHUP_END = "local.mintv.extra.CATCHUP_END";
-
-    /** Public, clear DASH VOD used to prove playback independently of MAXtv/CDN changes. */
-    public static final String DEMO_DASH_URL =
-            "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.mpd";
+    /** The timeshift manifest is dynamic; play it from its first frame, not the live edge. */
+    public static final String EXTRA_START_AT_BEGINNING = "local.mintv.extra.START_AT_BEGINNING";
 
     private static final long SEEK_STEP_MS = 10_000L;
     private static final long FAST_SEEK_STEP_MS = 30_000L;
@@ -365,13 +363,6 @@ public final class PlayerActivity extends BaseActivity {
         return intent;
     }
 
-    public static Intent intentForDemo(Context context) {        Intent intent = new Intent(context, PlayerActivity.class);
-        intent.putExtra(EXTRA_URL, DEMO_DASH_URL);
-        intent.putExtra(EXTRA_TITLE, context.getString(R.string.player_demo_title));
-        intent.putExtra(EXTRA_SUBTITLE, context.getString(R.string.player_demo_subtitle));
-        return intent;
-    }
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -461,11 +452,23 @@ public final class PlayerActivity extends BaseActivity {
         if (currentChannel != null) {
             local.mintv.epg.EpgProgram now = EpgCache.programmeAt(
                     currentChannel.getNumber(), System.currentTimeMillis());
-            tuneIdent.showChannel(currentChannel, now == null ? null : now.title, true);
+            String identProgramme = now == null ? null : now.title;
+            if (!liveSession) {
+                String requested = getIntent().getStringExtra(EXTRA_PROGRAMME_TITLE);
+                if (requested != null && !requested.isEmpty()) {
+                    identProgramme = requested;
+                }
+            }
+            tuneIdent.showChannel(currentChannel, identProgramme, liveSession);
         } else {
-            tuneIdent.showDemo(getIntent().getStringExtra(EXTRA_TITLE) != null
-                    ? getIntent().getStringExtra(EXTRA_TITLE)
-                    : getString(R.string.player_demo_title));
+            String identTitle = getIntent().getStringExtra(EXTRA_TITLE);
+            boolean replay = "CATCHUP".equalsIgnoreCase(
+                    getIntent().getStringExtra(EXTRA_CONTENT_TYPE));
+            tuneIdent.showMedia(
+                    identTitle == null || identTitle.isEmpty()
+                            ? getString(R.string.player_title_fallback) : identTitle,
+                    getIntent().getStringExtra(EXTRA_SUBTITLE),
+                    replay);
         }
 
         // The legacy title/subtitle header (and its top gradient scrim) is gone; the rich
@@ -492,6 +495,13 @@ public final class PlayerActivity extends BaseActivity {
         long requestedResume = getIntent().getLongExtra(EXTRA_RESUME_SECONDS, 0L);
         if (resumePositionMs == C.TIME_UNSET && requestedResume > 0 && !liveSession) {
             resumePositionMs = requestedResume * 1000L;
+        }
+        // A catch-up/start-over manifest is a rolling timeshift window. Media3 would join it
+        // near the live edge, which is the wrong end of the recording; seek to the first frame
+        // unless a bookmark already supplied a resume position.
+        if (resumePositionMs == C.TIME_UNSET
+                && getIntent().getBooleanExtra(EXTRA_START_AT_BEGINNING, false)) {
+            resumePositionMs = 0L;
         }
     }
 

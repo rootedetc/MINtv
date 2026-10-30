@@ -1,15 +1,12 @@
 package local.mintv.ui;
 
-import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.StateListDrawable;
-import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -22,14 +19,11 @@ import local.mintv.R;
 
 /**
  * The fixed source rail: MINtv lockup, Home / Guide / Channels / Search / Settings, account and clock.
- * A narrow 96dp column so the guide keeps the width, the way a monitor wall keeps its
- * sources on the left. The five destinations and the account take focus.
- *
- * <p>At rest the destinations are icon-only tiles on a rounded raised panel inset 8dp inside
- * the rail; there is no label under the icon. When the rail holds focus the panel widens over
- * the content to 208dp and each destination becomes one row: icon tile, then a readable
- * Barlow Condensed label. The rail root itself never changes width, so the page content is
- * never reflowed; the expanded panel is drawn above the content with a small Z lift.</p>
+ * A narrow 96dp icon column, the way a native TV sidebar keeps its destinations out of the
+ * content. Destinations and the account take focus; no labels appear on focus, so the rail
+ * never changes width or reflows the page. Selection is a magenta wash and tally, focus is a
+ * full-row surface plus the 2dp white rule, and choosing a destination sends focus into the
+ * content panel.
  */
 public final class TvRail extends FrameLayout {
 
@@ -43,23 +37,11 @@ public final class TvRail extends FrameLayout {
         void onAccount();
     }
 
-    /** Panel widths; the rail root stays at 96dp and the expanded panel ends at 208dp. */
-    private static final float PANEL_COLLAPSED_DP = 80f;
-    /** 160dp rail at full expansion: enough for a 15sp label, while Settings still fits. */
-    private static final float PANEL_EXPANDED_DP = 128f;
+    /** The panel is inset inside the 96dp rail root; both widths are fixed. */
+    private static final float PANEL_WIDTH_DP = 80f;
     private static final float ROW_HEIGHT_DP = 58f;
     private static final float TILE_DP = 34f;
     private static final float ICON_DP = 20f;
-    /**
-     * The collapsed tile is centred in the 72dp panel content: (72 - 34) / 2 = 19dp, while
-     * the expanded tile sits at 12dp. The 7dp translation keeps the icon on the rail centre.
-     */
-    private static final float TILE_SHIFT_DP = 7f;
-    /** Same idea for the avatar: centred in the collapsed foot, left-aligned when expanded. */
-    private static final float AVATAR_SHIFT_DP = 9f;
-    private static final float LABEL_SHIFT_DP = 3f;
-    private static final long EXPAND_MS = 140L;
-    private static final long COLLAPSE_MS = 110L;
     private static final float ROW_RADIUS_DP = 10f;
     private static final int WASH_SELECTED = 0x1FE6007E;
     private static final int WASH_SELECTED_PRESSED = 0x33E6007E;
@@ -67,25 +49,17 @@ public final class TvRail extends FrameLayout {
     private static final int FOCUS_RING = 0xFFFFFFFF;
     private static final int FOCUS_PRESSED = 0xFF323B48;
 
-    private final DecelerateInterpolator ease = new DecelerateInterpolator(2.2f);
     private final List<NavItem> items = new ArrayList<>();
     private final LinearLayout panel;
     private final LinearLayout.LayoutParams panelLp;
     private final LinearLayout.LayoutParams accountLp;
     private final View accountRow;
     private final FrameLayout accountAvatarFrame;
-    private final TextView accountLabel;
     private final View accountAvatar;
     private final View edge;
-    private final StateListDrawable accountBgCollapsed;
-    private final StateListDrawable accountBgExpanded;
     private Listener listener;
     private Tab active = Tab.GUIDE;
     private Tab lastFocused;
-    private boolean railFocused;
-    private boolean accountExpanded;
-    private float expansion;
-    private ValueAnimator expandAnimator;
 
     public TvRail(Context context) {
         super(context);
@@ -120,7 +94,7 @@ public final class TvRail extends FrameLayout {
         panel.setClipToPadding(false);
         Tv.pad(panel, 4, 10, 4, 10);
         panelLp = new LinearLayout.LayoutParams(
-                Tv.dp(context, PANEL_COLLAPSED_DP), ViewGroup.LayoutParams.WRAP_CONTENT);
+                Tv.dp(context, PANEL_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT);
         panelLp.leftMargin = pad;
         panelLp.gravity = Gravity.START;
         column.addView(panel, panelLp);
@@ -173,14 +147,12 @@ public final class TvRail extends FrameLayout {
         column.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1f));
 
         // Account: a quiet avatar with a status dot. It opens login when signed out and the
-        // account section of Settings when signed in. The name only appears while the rail
-        // is expanded; at rest the avatar keeps the bare ground under the panel.
+        // account section of Settings when signed in. The avatar is the whole visual; the
+        // name stays in Settings and in the accessibility description.
         FrameLayout account = new FrameLayout(context);
         account.setFocusable(true);
         account.setClickable(true);
-        accountBgCollapsed = rowStates(context, false, Color.TRANSPARENT, 0, 0f);
-        accountBgExpanded = rowStates(context, false, Tv.BG_RAISED, Tv.STROKE, 1f);
-        account.setBackground(accountBgCollapsed);
+        account.setBackground(rowStates(context, false, Color.TRANSPARENT, 0, 0f));
         account.setContentDescription(context.getString(R.string.action_sign_in));
         account.setId(View.generateViewId());
         account.setOnClickListener(view -> {
@@ -205,37 +177,14 @@ public final class TvRail extends FrameLayout {
         accountAvatarFrame.addView(accountAvatar, dotLp);
         FrameLayout.LayoutParams avatarLp = new FrameLayout.LayoutParams(
                 Tv.dp(context, 38), Tv.dp(context, 38),
-                Gravity.START | Gravity.CENTER_VERTICAL);
-        avatarLp.leftMargin = Tv.dp(context, 12);
+                Gravity.CENTER_HORIZONTAL | Gravity.CENTER_VERTICAL);
         account.addView(accountAvatarFrame, avatarLp);
 
-        accountLabel = Tv.displayText(context, 15f, Tv.TEXT_2);
-        accountLabel.setSingleLine(true);
-        accountLabel.setEllipsize(TextUtils.TruncateAt.END);
-        accountLabel.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        accountLabel.setLetterSpacing(0.02f);
-        accountLabel.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        // Fixed width: the row clips it while collapsing instead of reflowing the name.
-        FrameLayout.LayoutParams accountLabelLp = new FrameLayout.LayoutParams(
-                Tv.dp(context, 60), ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.START | Gravity.CENTER_VERTICAL);
-        accountLabelLp.leftMargin = Tv.dp(context, 56);
-        account.addView(accountLabel, accountLabelLp);
-
         accountLp = new LinearLayout.LayoutParams(
-                Tv.dp(context, PANEL_COLLAPSED_DP), Tv.dp(context, ROW_HEIGHT_DP));
+                Tv.dp(context, PANEL_WIDTH_DP), Tv.dp(context, ROW_HEIGHT_DP));
         accountLp.leftMargin = pad;
         accountLp.gravity = Gravity.START;
         column.addView(account, accountLp);
-
-        account.setOnFocusChangeListener((v, hasFocus) -> {
-            applyAccountColors(hasFocus);
-            if (hasFocus) {
-                setRailFocused(true);
-            } else {
-                post(TvRail.this::syncRailFocus);
-            }
-        });
 
         TextView clock = Tv.numeral(context, 21f, Tv.TEXT);
         clock.setGravity(Gravity.CENTER);
@@ -285,16 +234,6 @@ public final class TvRail extends FrameLayout {
                 Gravity.END));
 
         setActive(Tab.GUIDE);
-        applyRailFocus(false, false);
-    }
-
-    @Override
-    protected void onDetachedFromWindow() {
-        if (expandAnimator != null) {
-            expandAnimator.cancel();
-            expandAnimator = null;
-        }
-        super.onDetachedFromWindow();
     }
 
     public void setListener(Listener listener) {
@@ -317,12 +256,10 @@ public final class TvRail extends FrameLayout {
 
     /** Account foot updates on resume, without rebuilding the rail. */
     public void setAccount(String label, boolean signedIn) {
-        accountLabel.setText(label);
         accountAvatar.getBackground().setTint(signedIn ? Tv.BRAND : Tv.SURFACE_3);
         accountAvatar.setVisibility(signedIn ? View.VISIBLE : View.GONE);
         accountRow.setContentDescription(label == null || label.isEmpty()
                 ? getContext().getString(R.string.action_sign_in) : label);
-        applyAccountColors(accountRow.isFocused());
     }
 
     /**
@@ -386,92 +323,6 @@ public final class TvRail extends FrameLayout {
         }
     }
 
-    /**
-     * Focus may move between two rail items, in which case the first item's blur fires
-     * before the next item's focus. Re-read the rail subtree after layout instead of
-     * collapsing on every individual blur.
-     */
-    private void syncRailFocus() {
-        setRailFocused(findFocus() != null);
-    }
-
-    private void setRailFocused(boolean focused) {
-        if (railFocused == focused) {
-            return;
-        }
-        applyRailFocus(focused, true);
-    }
-
-    private void applyRailFocus(boolean focused, boolean animate) {
-        railFocused = focused;
-        if (expandAnimator != null) {
-            expandAnimator.cancel();
-            expandAnimator = null;
-        }
-        if (!animate) {
-            setExpansion(focused ? 1f : 0f);
-            return;
-        }
-        expandAnimator = ValueAnimator.ofFloat(expansion, focused ? 1f : 0f);
-        expandAnimator.setDuration(focused ? EXPAND_MS : COLLAPSE_MS);
-        expandAnimator.setInterpolator(ease);
-        expandAnimator.addUpdateListener(
-                animator -> setExpansion(((Float) animator.getAnimatedValue()).floatValue()));
-        expandAnimator.start();
-    }
-
-    /**
-     * One fraction drives the whole rail: the panel/account width, the label reveal, the
-     * tile centring and the hairline. The rail root keeps its 96dp layout width, so nothing
-     * inside the content column is re-measured by the expansion.
-     */
-    private void setExpansion(float fraction) {
-        expansion = Math.max(0f, Math.min(1f, fraction));
-        // The rail is the first child of the screen's horizontal shell. Widening the rail
-        // itself (instead of overdrawing the content) guarantees the expanded panel is
-        // never hidden behind the content column, and keeps the D-pad geometry exact.
-        ViewGroup.LayoutParams rootLp = getLayoutParams();
-        if (rootLp instanceof LinearLayout.LayoutParams) {
-            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) rootLp;
-            int rootWidth = Math.round(Tv.dpf(getContext(),
-                    PANEL_COLLAPSED_DP + 16f
-                            + (PANEL_EXPANDED_DP - PANEL_COLLAPSED_DP) * expansion));
-            if (lp.width != rootWidth) {
-                lp.width = rootWidth;
-                setLayoutParams(lp);
-            }
-        }
-        int width = Math.round(Tv.dpf(getContext(),
-                PANEL_COLLAPSED_DP + (PANEL_EXPANDED_DP - PANEL_COLLAPSED_DP) * expansion));
-        if (panelLp.width != width) {
-            panelLp.width = width;
-            panel.setLayoutParams(panelLp);
-        }
-        if (accountLp.width != width) {
-            accountLp.width = width;
-            accountRow.setLayoutParams(accountLp);
-        }
-        // The foot keeps the bare ground at rest. Only while expanded does it grow a quiet
-        // plate behind the account name, so the name never floats over programme artwork.
-        boolean expanded = expansion > 0.001f;
-        if (expanded != accountExpanded) {
-            accountExpanded = expanded;
-            accountRow.setBackground(expanded ? accountBgExpanded : accountBgCollapsed);
-        }
-        float rest = 1f - expansion;
-        for (NavItem item : items) {
-            item.applyExpansion(expansion, rest);
-        }
-        accountLabel.setAlpha(expansion);
-        accountLabel.setVisibility(expansion > 0.01f ? View.VISIBLE : View.INVISIBLE);
-        accountAvatarFrame.setTranslationX(Tv.dpf(getContext(), AVATAR_SHIFT_DP) * rest);
-        edge.setAlpha(rest);
-    }
-
-    private void applyAccountColors(boolean focused) {
-        accountLabel.setTextColor(focused ? Tv.TEXT : Tv.TEXT_2);
-    }
-
     private static StateListDrawable rowStates(Context context, boolean selectable,
                                                int idleFill, int idleStroke, float idleStrokeDp) {
         StateListDrawable drawable = new StateListDrawable();
@@ -506,7 +357,6 @@ public final class TvRail extends FrameLayout {
         final Tab tab;
         private final FrameLayout tile;
         private final ImageView icon;
-        private final TextView label;
         private final View tally;
 
         NavItem(Context context, Tab tab, int iconRes, String text) {
@@ -515,45 +365,25 @@ public final class TvRail extends FrameLayout {
             setId(itemId(tab));
             setFocusable(true);
             setClickable(true);
-            // Keep clipping on: the fixed-width label is revealed by the growing row edge
-            // instead of being re-flowed/ellipsized on every animation frame.
             setClipChildren(true);
             setBackground(rowStates(context, true, Color.TRANSPARENT, 0, 0f));
-            // The row is one accessibility target: the visual label is not read twice.
+            // The icon row is one accessibility target; the destination name is spoken from
+            // here because the native rail does not paint labels.
             setContentDescription(text);
 
-            // A rounded tile holds the glyph. It stays 34dp at both widths and slides to the
-            // rail centre when the panel collapses.
+            // A rounded 34dp tile holds the glyph, centred in the fixed 80dp panel.
             tile = new FrameLayout(context);
             tile.setBackground(Tv.box(context, Tv.SURFACE_2, 10f, 0, 0f));
             tile.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             FrameLayout.LayoutParams tileLp = new FrameLayout.LayoutParams(
                     Tv.dp(context, TILE_DP), Tv.dp(context, TILE_DP),
-                    Gravity.START | Gravity.CENTER_VERTICAL);
-            tileLp.leftMargin = Tv.dp(context, 12);
+                    Gravity.CENTER_HORIZONTAL | Gravity.CENTER_VERTICAL);
             addView(tile, tileLp);
 
             icon = Tv.icon(context, iconRes, Tv.TEXT_3, ICON_DP);
             icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             tile.addView(icon, new FrameLayout.LayoutParams(
                     Tv.dp(context, ICON_DP), Tv.dp(context, ICON_DP), Gravity.CENTER));
-
-            label = Tv.displayText(context, 15f, Tv.TEXT_2);
-            label.setText(text);
-            label.setAllCaps(true);
-            label.setLetterSpacing(0.06f);
-            label.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-            label.setSingleLine(true);
-            label.setEllipsize(TextUtils.TruncateAt.END);
-            label.setVisibility(View.INVISIBLE);
-            label.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            // Fixed width for the expanded row (136dp of content - 54dp - 2dp). The row
-            // clips the tail while it is narrower, so collapsing never squashes the text.
-            FrameLayout.LayoutParams labelLp = new FrameLayout.LayoutParams(
-                    Tv.dp(context, 64), ViewGroup.LayoutParams.WRAP_CONTENT,
-                    Gravity.START | Gravity.CENTER_VERTICAL);
-            labelLp.leftMargin = Tv.dp(context, 54);
-            addView(label, labelLp);
 
             tally = new View(context);
             tally.setBackground(Tv.box(context, Tv.BRAND, 99f, 0, 0f));
@@ -575,11 +405,6 @@ public final class TvRail extends FrameLayout {
                     lastFocused = tab;
                 }
                 applyColors(hasFocus);
-                if (hasFocus) {
-                    setRailFocused(true);
-                } else {
-                    post(TvRail.this::syncRailFocus);
-                }
             });
         }
 
@@ -589,19 +414,10 @@ public final class TvRail extends FrameLayout {
             applyColors(isFocused());
         }
 
-        /** Label reveal, tile centring and the label slide are driven by the panel fraction. */
-        void applyExpansion(float fraction, float rest) {
-            label.setAlpha(fraction);
-            label.setVisibility(fraction > 0.01f ? View.VISIBLE : View.INVISIBLE);
-            label.setTranslationX(Tv.dpf(getContext(), LABEL_SHIFT_DP) * rest);
-            tile.setTranslationX(Tv.dpf(getContext(), TILE_SHIFT_DP) * rest);
-        }
-
         private void applyColors(boolean focused) {
             boolean selected = isSelected();
             int glyph = selected ? Tv.BRAND_BRIGHT : focused ? Tv.TEXT : Tv.TEXT_3;
             icon.setColorFilter(glyph);
-            label.setTextColor(selected || focused ? Tv.TEXT : Tv.TEXT_2);
             tile.setBackground(Tv.box(getContext(),
                     selected ? WASH_TILE : focused ? Tv.SURFACE_3 : Tv.SURFACE_2,
                     10f, 0, 0f));
