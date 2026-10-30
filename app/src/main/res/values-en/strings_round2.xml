@@ -6,7 +6,7 @@
     <string name="home_hero_next">Next recommendation</string>
     <string name="home_hero_position">%1$d of %2$d</string>
 
-    <string name="player_hint_overlay">OK: pause · ◀▶: −/+ 10 s · ▼: settings · BACK: close</string>
+    <string name="player_hint_overlay">OK: pause · ◀▶: −/+ 10 s · ▲: channels · ▼: settings · BACK: close</string>
     <string name="player_switcher_hint">▲▼ channel · OK watch · BACK close</string>
     <string name="player_settings_title">Playback settings</string>
     <string name="player_settings_hint">▲▼ select · ◀▶ change · OK confirm · BACK close</string>

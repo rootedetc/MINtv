@@ -109,6 +109,9 @@ public final class HomeActivity extends BaseActivity {
     private LinearLayout categoriesRow;
     private TextView subtitle;
     private TextView listAction;
+    private View refreshAction;
+    private View headerView;
+    private View heroView;
     private View firstLoadSkeleton;
     private LinearLayout errorPanel;
 
@@ -162,6 +165,7 @@ public final class HomeActivity extends BaseActivity {
     private void buildUi() {
         LinearLayout header = host.header(getString(R.string.nav_home),
                 getString(R.string.home_subtitle));
+        headerView = header;
         TextView list = host.action(getString(R.string.watchlist_title));
         listAction = list;
         list.setOnClickListener(view -> startActivity(new Intent(this, WatchlistActivity.class)));
@@ -182,6 +186,7 @@ public final class HomeActivity extends BaseActivity {
                         Tv.dp(this, 21), Tv.dp(this, 21), Gravity.CENTER));
         header.addView(refresh, new LinearLayout.LayoutParams(
                 Tv.dp(this, 44), Tv.dp(this, 44)));
+        refreshAction = refresh;
         host.content.addView(header, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, Tv.dp(this, 80)));
 
@@ -435,6 +440,7 @@ public final class HomeActivity extends BaseActivity {
 
     private void renderPage(HomePage page) {
         rails.removeAllViews();
+        heroView = null;
         firstLoadSkeleton = null;
         if (page == null || page.components.isEmpty()) {
             TextView empty = Tv.text(this, 14f, Tv.TEXT_2, false);
@@ -473,6 +479,7 @@ public final class HomeActivity extends BaseActivity {
 
     private void addHero(HomeComponent component) {
         FrameLayout hero = new FrameLayout(this);
+        heroView = hero;
         hero.setBackground(Tv.box(this, HERO_PLATE, 10f, Tv.STROKE, 1f));
         // The hero is scenery: no focus, no white outline. Focus lives on Watch and More info.
         hero.setFocusable(false);
@@ -840,13 +847,15 @@ public final class HomeActivity extends BaseActivity {
                             return;
                         }
                         List<CardItem> cards = new ArrayList<>();
+                        long nowMs = System.currentTimeMillis();
                         for (Channel channel : channels) {
-                            EpgProgram now = EpgCache.programmeAt(channel.getNumber(),
-                                    System.currentTimeMillis());
+                            EpgProgram now = EpgCache.programmeAt(channel.getNumber(), nowMs);
                             cards.add(CardItem.channel(channel.getTitle(HomeActivity.this),
                                     channel.getLogoUrl(), channel.getNumber(),
-                                    now == null ? getString(R.string.channels_now)
-                                            : now.title, channel));
+                                    now == null ? getString(R.string.channels_now) : now.title,
+                                    channel.getQuality(),
+                                    now == null ? 0 : Math.round(now.progress(nowMs) * 100f),
+                                    channel));
                         }
                         submitRail(section, adapter, cards);
                         focusFirstCard(section);
@@ -869,8 +878,9 @@ public final class HomeActivity extends BaseActivity {
             if (program == null) {
                 continue;
             }
-            cards.add(CardItem.channel(program.displayTitle(this), channel.logoUrl, channel.number,
-                    channel.title + " · " + Tv.clock(program.startMs), channel));
+            cards.add(CardItem.channel(channel.title, channel.logoUrl, channel.number,
+                    program.displayTitle(this), channel.quality,
+                    Math.round(program.progress(now) * 100f), channel));
             if (cards.size() >= RAIL_SIZE) {
                 break;
             }
@@ -894,13 +904,15 @@ public final class HomeActivity extends BaseActivity {
                         for (HomeAsset asset : feed.assets) {
                             cards.add(CardItem.of(asset, HomeActivity.this));
                         }
+                        long nowMs = System.currentTimeMillis();
                         for (Channel channel : feed.channels) {
-                            EpgProgram now = EpgCache.programmeAt(channel.getNumber(),
-                                    System.currentTimeMillis());
+                            EpgProgram now = EpgCache.programmeAt(channel.getNumber(), nowMs);
                             cards.add(CardItem.channel(channel.getTitle(HomeActivity.this),
                                     channel.getLogoUrl(), channel.getNumber(),
-                                    now == null ? getString(R.string.channels_now)
-                                            : now.title, channel));
+                                    now == null ? getString(R.string.channels_now) : now.title,
+                                    channel.getQuality(),
+                                    now == null ? 0 : Math.round(now.progress(nowMs) * 100f),
+                                    channel));
                         }
                         submitRail(section, adapter, cards);
                         focusFirstCard(section);
@@ -1095,31 +1107,58 @@ public final class HomeActivity extends BaseActivity {
     }
 
     private boolean isInRail(View view) {
-        if (view == null) {
-            return false;
-        }
-        android.view.ViewParent parent = view.getParent();
-        while (parent != null) {
-            if (parent == host.rail) {
-                return true;
-            }
-            parent = parent.getParent();
-        }
-        return view == host.rail;
+        return isInView(view, host.rail);
     }
 
     private boolean isInCategories(View view) {
-        if (view == null) {
+        return isInView(view, categoriesRow);
+    }
+
+    private boolean isInView(View view, View ancestor) {
+        if (view == null || ancestor == null) {
             return false;
+        }
+        if (view == ancestor) {
+            return true;
         }
         android.view.ViewParent parent = view.getParent();
         while (parent != null) {
-            if (parent == categoriesRow) {
+            if (parent == ancestor) {
                 return true;
             }
             parent = parent.getParent();
         }
-        return view == categoriesRow;
+        return false;
+    }
+
+    /** The active category chip, or the first one while the page is still loading. */
+    private boolean focusSelectedCategory() {
+        if (categoriesRow == null || categoriesRow.getChildCount() == 0) {
+            return false;
+        }
+        View first = null;
+        for (int i = 0; i < categoriesRow.getChildCount(); i++) {
+            View chip = categoriesRow.getChildAt(i);
+            if (chip == null || !chip.isShown()) {
+                continue;
+            }
+            if (first == null) {
+                first = chip;
+            }
+            if (chip.isSelected()) {
+                return chip.requestFocus();
+            }
+        }
+        return first != null && first.requestFocus();
+    }
+
+    private void focusHeaderAction() {
+        if (listAction != null && listAction.isShown() && listAction.requestFocus()) {
+            return;
+        }
+        if (refreshAction != null && refreshAction.isShown()) {
+            refreshAction.requestFocus();
+        }
     }
 
     @Override
@@ -1127,6 +1166,22 @@ public final class HomeActivity extends BaseActivity {
         if (event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
             View current = getCurrentFocus();
             int key = event.getKeyCode();
+            // The categories are outside the ScrollView, so a geometric UP from the hero
+            // lands on the sidebar. Route the top-of-content climb explicitly.
+            if (key == android.view.KeyEvent.KEYCODE_DPAD_UP && isInView(current, heroView)) {
+                if (!focusSelectedCategory()) {
+                    focusHeaderAction();
+                }
+                return true;
+            }
+            if (key == android.view.KeyEvent.KEYCODE_DPAD_UP && isInCategories(current)) {
+                focusHeaderAction();
+                return true;
+            }
+            if (key == android.view.KeyEvent.KEYCODE_DPAD_DOWN
+                    && isInView(current, headerView)) {
+                return focusSelectedCategory();
+            }
             if (primaryFocusTarget != null && primaryFocusTarget.isShown()
                     && ((isInRail(current)
                     && key == android.view.KeyEvent.KEYCODE_DPAD_RIGHT)

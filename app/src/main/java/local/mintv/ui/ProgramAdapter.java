@@ -13,8 +13,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-/** RecyclerView adapter for {@link ProgramCard}; works in horizontal rails and vertical grids. */
-public final class ProgramAdapter extends RecyclerView.Adapter<ProgramAdapter.Holder> {
+/** RecyclerView adapter for {@link ProgramCard} and {@link ChannelCard}; rails and grids. */
+public final class ProgramAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
+
+    private static final int TYPE_POSTER = 0;
+    private static final int TYPE_CHANNEL = 1;
 
     public interface Listener {
         void onCard(CardItem item);
@@ -112,9 +115,21 @@ public final class ProgramAdapter extends RecyclerView.Adapter<ProgramAdapter.Ho
         return item.id == null ? position : item.id.hashCode();
     }
 
+    @Override
+    public int getItemViewType(int position) {
+        return items.get(position).channel ? TYPE_CHANNEL : TYPE_POSTER;
+    }
+
     @NonNull
     @Override
-    public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+    public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        if (viewType == TYPE_CHANNEL) {
+            ChannelCard card = new ChannelCard(parent.getContext());
+            card.setLayoutParams(new RecyclerView.LayoutParams(
+                    Tv.dp(parent.getContext(), ChannelCard.WIDTH_DP),
+                    Tv.dp(parent.getContext(), ChannelCard.HEIGHT_DP)));
+            return new ChannelHolder(card);
+        }
         ProgramCard card = new ProgramCard(parent.getContext());
         card.setLayoutParams(new RecyclerView.LayoutParams(
                 Tv.dp(parent.getContext(), ProgramCard.WIDTH_DP),
@@ -123,25 +138,34 @@ public final class ProgramAdapter extends RecyclerView.Adapter<ProgramAdapter.Ho
     }
 
     @Override
-    public void onBindViewHolder(@NonNull Holder holder, int position) {
+    public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
         CardItem item = items.get(position);
-        holder.card.bind(item);
-        holder.card.setSelected(selected.contains(item.id));
-        holder.card.setOnClickListener(view -> {
+        View card;
+        if (holder instanceof ChannelHolder) {
+            ChannelCard channelCard = ((ChannelHolder) holder).card;
+            channelCard.bind(item);
+            card = channelCard;
+        } else {
+            ProgramCard poster = ((Holder) holder).card;
+            poster.bind(item);
+            poster.setSelected(selected.contains(item.id));
+            card = poster;
+        }
+        card.setOnClickListener(view -> {
             if (selectionMode) {
                 toggle(item.id);
             } else {
                 listener.onCard(item);
             }
         });
-        holder.card.setOnLongClickListener(view -> {
+        card.setOnLongClickListener(view -> {
             listener.onCardLongClick(item);
             return true;
         });
         if (position % 6 == 0 && railFocusId != View.NO_ID) {
-            holder.card.setNextFocusLeftId(railFocusId);
+            card.setNextFocusLeftId(railFocusId);
         } else {
-            holder.card.setNextFocusLeftId(View.NO_ID);
+            card.setNextFocusLeftId(View.NO_ID);
         }
     }
 
@@ -154,6 +178,15 @@ public final class ProgramAdapter extends RecyclerView.Adapter<ProgramAdapter.Ho
         final ProgramCard card;
 
         Holder(ProgramCard card) {
+            super(card);
+            this.card = card;
+        }
+    }
+
+    static final class ChannelHolder extends RecyclerView.ViewHolder {
+        final ChannelCard card;
+
+        ChannelHolder(ChannelCard card) {
             super(card);
             this.card = card;
         }

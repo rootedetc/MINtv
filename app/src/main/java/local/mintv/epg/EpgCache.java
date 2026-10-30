@@ -8,7 +8,7 @@ import java.util.List;
  * Process-wide, read-only view of the EPG day that is currently loaded.
  *
  * <p>{@link EpgRepository} owns fetching and disk caching; this holder exists so the player
- * can show "what is on now" for the channel it is playing (and update it while zapping)
+ * can show "what is on now" for the channel it is playing (and update it while switching)
  * without re-parsing the day or touching the network. It is populated by the EPG screen
  * after each delivery and is safe to read from any thread once published.</p>
  */

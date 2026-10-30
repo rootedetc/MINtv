@@ -53,6 +53,7 @@ import local.mintv.epg.EpgCache;
 import local.mintv.epg.EpgProgram;
 import local.mintv.net.ApiException;
 import local.mintv.net.Background;
+import local.mintv.net.ConcurrencyLock;
 import local.mintv.net.Http;
 import local.mintv.net.PlaybackApi;
 import local.mintv.player.ChannelQueue;
@@ -161,7 +162,7 @@ public final class PlayerActivity extends BaseActivity {
             });
 
     private String mediaUrl;
-    /** URL of the media item currently being played (may differ from {@link #mediaUrl} when zapping). */
+    /** URL of the media item currently being played (may differ from {@link #mediaUrl} after a switch). */
     private String playbackUrl;
     private String drmLicenseUrl;
     private String drmLicenseToken;
@@ -400,14 +401,9 @@ public final class PlayerActivity extends BaseActivity {
         readBookmarkExtras();
 
         // Rich TiviMate-style overlay owns the top-left channel card, top-right clock,
-        // bottom programme card and the DOWN quick-switch strip.
+        // bottom programme card, the channel switcher and the playback settings sheet.
         overlay = new PlayerOverlay(this, findViewById(android.R.id.content),
                 new PlayerOverlay.Callback() {
-                    @Override
-                    public void onZap(int delta) {
-                        zap(delta);
-                    }
-
                     @Override
                     public void onChannelPicked(Channel channel) {
                         playChannel(channel);
@@ -546,6 +542,10 @@ public final class PlayerActivity extends BaseActivity {
 
     @Override
     protected void onDestroy() {
+        // The player is the owner of the account's stream reservation. Give it back when
+        // the activity really goes away; a plain onStop keeps it so a resume from
+        // background/Login can restart the same stream.
+        ConcurrencyLock.release();
         handler.removeCallbacks(overlayTick);
         handler.removeCallbacks(startupWatchdog);
         if (overlay != null) {
@@ -940,7 +940,8 @@ public final class PlayerActivity extends BaseActivity {
             }
             return super.dispatchKeyEvent(event);
         }
-        // The overlay gets first refusal: it owns OK/UP/DOWN and the quick-switch strip.
+        // The overlay gets first refusal: it owns OK/UP/DOWN, the channel switcher and
+        // the playback settings sheet.
         if (overlay != null && overlay.dispatchKeyEvent(event)) {
             return true;
         }
@@ -1290,18 +1291,6 @@ public final class PlayerActivity extends BaseActivity {
     }
 
     // ------------------------------------------------------------------ overlay
-
-    // ------------------------------------------------------------------ zapping
-
-    private void zap(int delta) {
-        if (!liveSession || !ChannelQueue.hasNext()) {
-            return;
-        }
-        Channel next = ChannelQueue.step(delta);
-        if (next != null) {
-            playChannel(next);
-        }
-    }
 
     /** Switches the player to {@code channel}, resolving entitlement first if needed. */
     private void playChannel(Channel channel) {

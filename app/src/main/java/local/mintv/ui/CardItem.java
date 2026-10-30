@@ -21,6 +21,7 @@ public final class CardItem {
     public final String showType;
     public final String contentType;
     public final String channelName;
+    public final String quality;
     public final int channelNumber;
     public final int progressPercent;
     public final int remainingMinutes;
@@ -42,6 +43,7 @@ public final class CardItem {
         this.showType = b.showType;
         this.contentType = b.contentType;
         this.channelName = b.channelName;
+        this.quality = b.quality;
         this.channelNumber = b.channelNumber;
         this.progressPercent = b.progressPercent;
         this.remainingMinutes = b.remainingMinutes;
@@ -161,13 +163,16 @@ public final class CardItem {
         return new CardItem(b);
     }
 
+    /** Channel card with the same quality label and now-programme progress as the grid. */
     public static CardItem channel(String title, String image, int number, String subtitle,
-                                   Object source) {
+                                   String quality, int progressPercent, Object source) {
         Builder b = new Builder();
         b.title = title == null ? "" : title;
         b.imageUrl = image == null ? "" : image;
         b.channelNumber = number;
         b.subtitle = subtitle == null ? "" : subtitle;
+        b.quality = quality == null ? "" : quality;
+        b.progressPercent = Math.max(0, Math.min(100, progressPercent));
         b.channel = true;
         b.source = source;
         b.id = "channel:" + number;
@@ -197,6 +202,7 @@ public final class CardItem {
     private static final class Builder {
         String id = "", programId = "", seriesId = "", title = "", subtitle = "", badge = "";
         String imageUrl = "", deeplink = "", showType = "", contentType = "", channelName = "";
+        String quality = "";
         int channelNumber = -1, progressPercent, remainingMinutes;
         long runtimeSeconds;
         boolean adult, channel, series;

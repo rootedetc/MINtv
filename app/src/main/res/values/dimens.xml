@@ -37,7 +37,5 @@
 
     <!-- Player -->
     <dimen name="player_sheet_radius">14dp</dimen>
-    <dimen name="quick_panel_width">430dp</dimen>
-    <dimen name="quick_row_height">44dp</dimen>
     <dimen name="transport_button">58dp</dimen>
 </resources>

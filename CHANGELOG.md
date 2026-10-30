@@ -7,6 +7,30 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-30
+
+A polish and playback-reliability release: the player now reserves and releases its stream
+slot correctly, channels change only from the channel switcher, Channels keeps a single
+favourites filter, and Home's channel rails use the same card as the channel grid.
+
+### Changed
+
+- **Channels** — the All / Free / HD filter row is gone; favourites is now a single toggle
+  chip, and the options menu moved into a settings icon next to refresh.
+- **Player** — instant UP/DOWN and CH+/CH− zapping is gone. UP, OK and CH+/CH− open the
+  channel switcher, DOWN still opens playback settings, and a channel is tuned only by
+  picking it in the switcher.
+- **Home** — channel rails now use the channel card: contained logo, channel number, name,
+  quality, now line and live progress, instead of a cropped poster.
+
+### Fixed
+
+- **Playback** — the account's CLPP stream lock is now heartbeated and released on every
+  channel switch and when the player closes. Switching several channels in a row no longer
+  piles up stale stream reservations and trips the concurrency limit on the next tune.
+- **Home focus** — UP from the hero now lands on the category strip, UP from the categories
+  reaches the header actions, and DOWN returns, instead of jumping to the sidebar.
+
 ## [1.0.0] - 2026-10-27
 
 First complete release: the whole MAXtv client, from the guide to playback, packaged as one

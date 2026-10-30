@@ -42,9 +42,6 @@
     <string name="guide_selected_channel">Channel %1$d</string>
 
     <string name="channels_title">Channels</string>
-    <string name="channels_filter_all">All</string>
-    <string name="channels_filter_free">Free</string>
-    <string name="channels_filter_hd">HD</string>
     <string name="channels_empty_filter">No channels in this filter.</string>
     <string name="channels_loading">Loading channels…</string>
     <string name="channels_error_title">Channels unavailable</string>
@@ -131,10 +128,7 @@
     <string name="player_time_shift">START OVER</string>
     <string name="player_paused">PAUSED</string>
     <string name="player_loading">Loading…</string>
-    <string name="player_hint">OK: pause   ◀ ▶: −/+ 10 s   ▼: channels   BACK: exit</string>
-    <string name="player_hint_strip">OK: watch   ◀ ▶: select   BACK: close</string>
-    <string name="player_hint_simple">OK: pause · ◀▶: −/+ 10 s · ▼: channels · BACK: close</string>
-    <string name="player_hint_strip_simple">◀ QUALITY · ▲▼ CHANNEL · OK SELECT</string>
+    <string name="player_hint">OK: pause   ◀ ▶: −/+ 10 s   ▲: channels   ▼: settings   BACK: exit</string>
     <string name="player_quality_change">OK · change</string>
     <string name="player_channels_empty">No channels</string>
     <string name="player_quality_changed">Quality: %1$s</string>
@@ -247,8 +241,6 @@
     <string name="player_next_label">NEXT</string>
     <string name="player_quality_label">QUALITY</string>
     <string name="player_quality_short">QUAL.</string>
-    <string name="player_channels_action">Channels</string>
-    <string name="player_channels_open">▼: channels</string>
     <string name="player_tune_connecting">Connecting</string>
     <string name="player_tune_ready">Ready</string>
 

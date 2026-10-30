@@ -21,7 +21,7 @@ import local.mintv.ui.Tv;
 /**
  * The station ident shown while a stream acquires its first frame. It is the loading
  * state, never an added delay: the player publishes STATE_READY and the ident leaves at
- * once. Zapping inside the player does not replay it.
+ * once. Switching channels inside the player does not replay it.
  */
 public final class TuneIdent extends FrameLayout {
 

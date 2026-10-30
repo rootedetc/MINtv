@@ -46,9 +46,6 @@
 
     <!-- Channels -->
     <string name="channels_title">Kanali</string>
-    <string name="channels_filter_all">Svi</string>
-    <string name="channels_filter_free">Besplatni</string>
-    <string name="channels_filter_hd">HD</string>
     <string name="channels_empty_filter">Nema kanala u ovom filtru.</string>
     <string name="channels_loading">Učitavanje kanala…</string>
     <string name="channels_error_title">Kanali nisu dostupni</string>
@@ -138,10 +135,7 @@
     <string name="player_time_shift">OD POČETKA</string>
     <string name="player_paused">PAUZA</string>
     <string name="player_loading">Učitavanje…</string>
-    <string name="player_hint">OK: pauza   ◀ ▶: −/+ 10 s   ▼: kanali   BACK: izlaz</string>
-    <string name="player_hint_strip">OK: gledaj   ◀ ▶: odaberi   BACK: zatvori</string>
-    <string name="player_hint_simple">OK: pauza · ◀▶: −/+ 10 s · ▼: kanali · BACK: zatvori</string>
-    <string name="player_hint_strip_simple">◀ KVALITETA · ▲▼ KANAL · OK ODABERI</string>
+    <string name="player_hint">OK: pauza   ◀ ▶: −/+ 10 s   ▲: kanali   ▼: postavke   BACK: izlaz</string>
     <string name="player_quality_change">OK · promijeni</string>
     <string name="player_channels_empty">Nema kanala</string>
     <string name="player_quality_changed">Kvaliteta: %1$s</string>
@@ -260,8 +254,6 @@
     <string name="player_next_label">ZATIM</string>
     <string name="player_quality_label">KVALITETA</string>
     <string name="player_quality_short">KVAL.</string>
-    <string name="player_channels_action">Kanali</string>
-    <string name="player_channels_open">▼: kanali</string>
     <string name="player_tune_connecting">Povezivanje</string>
     <string name="player_tune_ready">Spremno</string>
 

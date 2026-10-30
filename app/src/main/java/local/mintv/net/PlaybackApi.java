@@ -407,6 +407,11 @@ public final class PlaybackApi {
      */
     private Playback fetchPlayback(String mediaId, String contentType, String token)
             throws ApiException {
+        // Free the reservation of the stream we are leaving before asking the selector for
+        // the next one; otherwise every zap piles up another session on the account and
+        // eventually the concurrency limit rejects all new tunes.
+        ConcurrencyLock.releaseBlocking();
+
         Map<String, String> query = new LinkedHashMap<>();
         query.put("client_id", GuestAuth.deviceId(appContext));
         query.put("media_id", mediaId);
@@ -442,6 +447,8 @@ public final class PlaybackApi {
                 Log.w(TAG, "session JWT has no dc_cts_* claims; playing clear");
             }
         }
+        // The manager owns the reservation from here until the player closes or switches.
+        ConcurrencyLock.hold(appContext, ConcurrencyLock.parse(media));
         return new Playback(src, licenseUrl, authorization);
     }
 

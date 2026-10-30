@@ -1591,7 +1591,7 @@ public final class EpgGridView extends View {
      * Scrolls just enough to make the focused row/block visible. Used by LEFT/RIGHT and
      * explicit jumps; never by UP/DOWN. When {@code horizontalOnlyIfOffscreen} is set, the
      * timeline only moves if the focused block is completely outside the viewport, which
-     * keeps zapping smooth when nearby channels share the same schedule.
+     * keeps channel switching smooth when nearby channels share the same schedule.
      */
     private void ensureProgramVisible(boolean smooth, boolean horizontalOnlyIfOffscreen) {
         if (focusRow < 0 || gridW <= 0 || gridH <= 0) {

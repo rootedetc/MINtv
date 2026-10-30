@@ -58,9 +58,8 @@ and the MAXtv catalogue text left in Croatian, as the service returns it.</sub>
 - **Guide (EPG)** — a TiviMate-style grid: 247 channels, a full day of programmes, day ruler,
   now line, progress on the current show, channel logos, and a lock on channels outside the
   signed-in account's subscription.
-- **Channels** — favourites, a free-to-air filter, HD filter, custom channel order, a reset
-  to the broadcast order, and the same subscription lock on every channel the account cannot
-  watch.
+- **Channels** — a one-tap favourites filter, custom channel order, a reset to the broadcast
+  order, and the same subscription lock on every channel the account cannot watch.
 - **Hrvatski / English UI** — choose the app language in Settings; the catalogue text stays as
   the service returns it.
 
@@ -68,8 +67,9 @@ and the MAXtv catalogue text left in Croatian, as the service returns it.</sub>
 
 - **Live TV** — DASH playback with Widevine for subscription channels, clear DASH for the
   free-to-air ones.
-- **Channel zapping** — `CH+`/`CH-` or `UP`/`DOWN` straight from the picture, with a compact
-  channel switcher when the overlay is open.
+- **Channel switcher** — `UP`, `OK` or `CH+`/`CH-` opens the player's compact channel list;
+  pick a channel there to tune it. Nothing zaps straight from the picture, so an accidental
+  UP/DOWN can no longer interrupt what you are watching.
 - **Catch-up / time shift** — pick a programme that already aired in the guide and it plays
   from the beginning.
 - **Resume and progress** — VOD/catch-up progress is written to the account every five

@@ -63,11 +63,8 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
     private TextView status;
     private View footer;
     private TextView footerInfo;
-    private TextView filterAll;
-    private TextView filterFree;
-    private TextView filterHd;
     private TextView filterFavourites;
-    private TextView optionsAction;
+    private FrameLayout optionsAction;
     private View emptyState;
     private TextView emptyText;
     private ProgressBar progress;
@@ -87,10 +84,9 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
     private boolean reorderMode;
     private List<Channel> reorderSnapshot;
     private int reorderPosition = -1;
-    private int filter; // 0 all, 1 free, 2 HD, 3 favourites
+    private boolean favouritesOnly;
     private boolean firstDataDelivered;
     private boolean fromCache;
-    private boolean openFavourites;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable nowTick = new Runnable() {
@@ -106,16 +102,13 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        favouritesOnly = getIntent() != null
+                && getIntent().getBooleanExtra(EXTRA_FAVOURITES, false);
         setContentView(buildUi());
 
         repository = ChannelRepository.get(this);
         accountRepository = new AccountChannelRepository(this);
         playbackApi = new PlaybackApi(this);
-        openFavourites = getIntent() != null
-                && getIntent().getBooleanExtra(EXTRA_FAVOURITES, false);
-        if (openFavourites) {
-            filter = 3;
-        }
         if (Session.get(this).isLoggedIn()) {
             Set<Integer> cached = ChannelSubscriptions.current(this);
             if (cached != null) {
@@ -146,7 +139,7 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
             serverOrder.clear();
             orderApplied = false;
             ChannelSubscriptions.clear();
-            if (filter == 3) {
+            if (favouritesOnly) {
                 applyFilter(false);
             }
         }
@@ -215,11 +208,12 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
         grid.setPadding(Tv.dp(this, 32), Tv.dp(this, 16),
                 Tv.dp(this, 32), Tv.dp(this, 64));
         grid.setVerticalScrollBarEnabled(false);
-        grid.setNextFocusUpId(filterAll.getId());
+        grid.setNextFocusUpId(filterFavourites.getId());
         grid.setNextFocusLeftId(rail.item(TvRail.Tab.CHANNELS).getId());
         adapter = new ChannelAdapter(this::openChannel, this::toggleFavourite);
         adapter.setSpanCount(spanCount);
         adapter.setRailFocusId(rail.item(TvRail.Tab.CHANNELS).getId());
+        adapter.setHeaderFocusId(filterFavourites.getId());
         grid.setAdapter(adapter);
         body.addView(grid, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -273,21 +267,15 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
         header.addView(titles, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        filterAll = chip(getString(R.string.channels_filter_all), 0);
-        filterFree = chip(getString(R.string.channels_filter_free), 1);
-        filterHd = chip(getString(R.string.channels_filter_hd), 2);
-        filterFavourites = chip(getString(R.string.channels_filter_favourites), 3);
-        updateChips();
+        filterFavourites = chip(getString(R.string.channels_filter_favourites));
+        updateFilterChip();
         LinearLayout chips = new LinearLayout(this);
         chips.setOrientation(LinearLayout.HORIZONTAL);
         chips.setGravity(Gravity.CENTER_VERTICAL);
-        chips.addView(filterAll, chipLp(0));
-        chips.addView(filterFree, chipLp(8));
-        chips.addView(filterHd, chipLp(8));
-        chips.addView(filterFavourites, chipLp(8));
+        chips.addView(filterFavourites, chipLp(0));
         header.addView(chips);
 
-        optionsAction = Tv.ghost(this, getString(R.string.channels_options));
+        optionsAction = iconButton(R.drawable.ic_settings, getString(R.string.channels_options));
         optionsAction.setOnClickListener(view -> {
             if (reorderMode) {
                 saveReorder();
@@ -296,25 +284,32 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
             }
         });
         LinearLayout.LayoutParams optionsLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, Tv.dp(this, 44));
+                Tv.dp(this, 44), Tv.dp(this, 44));
         optionsLp.leftMargin = Tv.dp(this, 10);
         header.addView(optionsAction, optionsLp);
 
-        FrameLayout refresh = new FrameLayout(this);
-        refresh.setBackgroundResource(R.drawable.bg_button_ghost);
-        refresh.setFocusable(true);
-        refresh.setClickable(true);
-        refresh.setContentDescription(getString(R.string.channels_refresh));
+        FrameLayout refresh = iconButton(R.drawable.ic_refresh,
+                getString(R.string.channels_refresh));
         refresh.setOnClickListener(view -> load(true));
-        Tv.focusScale(refresh);
-        refresh.addView(Tv.icon(this, R.drawable.ic_refresh, Tv.TEXT_2, 21f),
-                new FrameLayout.LayoutParams(
-                        Tv.dp(this, 21), Tv.dp(this, 21), Gravity.CENTER));
         LinearLayout.LayoutParams refreshLp = new LinearLayout.LayoutParams(
                 Tv.dp(this, 44), Tv.dp(this, 44));
         refreshLp.leftMargin = Tv.dp(this, 8);
         header.addView(refresh, refreshLp);
         return header;
+    }
+
+    /** Square ghost icon button; the header's refresh and options actions share it. */
+    private FrameLayout iconButton(int iconRes, String description) {
+        FrameLayout button = new FrameLayout(this);
+        button.setBackgroundResource(R.drawable.bg_button_ghost);
+        button.setFocusable(true);
+        button.setClickable(true);
+        button.setContentDescription(description);
+        Tv.focusScale(button);
+        button.addView(Tv.icon(this, iconRes, Tv.TEXT_2, 21f),
+                new FrameLayout.LayoutParams(
+                        Tv.dp(this, 21), Tv.dp(this, 21), Gravity.CENTER));
+        return button;
     }
 
     private LinearLayout.LayoutParams chipLp(int leftMargin) {
@@ -324,18 +319,30 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
         return lp;
     }
 
-    private TextView chip(String label, int index) {
+    private TextView chip(String label) {
         TextView view = Tv.text(this, 13f, Tv.TEXT_2, true);
+        view.setId(View.generateViewId());
         view.setText(label);
         view.setGravity(Gravity.CENTER);
         view.setPadding(Tv.dp(this, 18), 0, Tv.dp(this, 18), 0);
         view.setBackgroundResource(R.drawable.bg_chip);
         view.setFocusable(true);
         view.setClickable(true);
-        Tv.focusScale(view, 1.03f);
-        view.setOnClickListener(v -> setFilter(index));
-        view.setOnFocusChangeListener((v, hasFocus) -> view.setTextColor(
-                hasFocus ? Tv.TEXT : index == filter ? Tv.TEXT : Tv.TEXT_2));
+        view.setOnClickListener(v -> toggleFavourites());
+        // One listener owns both the focus scale and the label colour; setting a second
+        // focus listener would replace the scale that Tv.focusScale installs.
+        android.view.animation.DecelerateInterpolator ease =
+                new android.view.animation.DecelerateInterpolator(2.2f);
+        view.setOnFocusChangeListener((v, hasFocus) -> {
+            view.setTextColor(hasFocus || favouritesOnly ? Tv.TEXT : Tv.TEXT_2);
+            view.animate().cancel();
+            view.animate()
+                    .scaleX(hasFocus ? 1.03f : 1f)
+                    .scaleY(hasFocus ? 1.03f : 1f)
+                    .setDuration(hasFocus ? 140L : 110L)
+                    .setInterpolator(ease)
+                    .start();
+        });
         return view;
     }
 
@@ -393,36 +400,22 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
         footer.setVisibility(View.GONE);
     }
 
-    private void setFilter(int index) {
-        if (filter == index) {
-            return;
-        }
-        filter = index;
-        updateChips();
+    /** The favourites chip is a toggle: off shows the full line-up, on shows only favourites. */
+    private void toggleFavourites() {
+        favouritesOnly = !favouritesOnly;
+        updateFilterChip();
         applyFilter(true);
     }
 
-    private void updateChips() {
-        filterAll.setTextColor(filter == 0 ? Tv.TEXT : Tv.TEXT_2);
-        filterFree.setTextColor(filter == 1 ? Tv.TEXT : Tv.TEXT_2);
-        filterHd.setTextColor(filter == 2 ? Tv.TEXT : Tv.TEXT_2);
-        filterFavourites.setTextColor(filter == 3 ? Tv.TEXT : Tv.TEXT_2);
-        filterAll.setSelected(filter == 0);
-        filterFree.setSelected(filter == 1);
-        filterHd.setSelected(filter == 2);
-        filterFavourites.setSelected(filter == 3);
+    private void updateFilterChip() {
+        filterFavourites.setTextColor(favouritesOnly ? Tv.TEXT : Tv.TEXT_2);
+        filterFavourites.setSelected(favouritesOnly);
     }
 
     private void applyFilter(boolean moveFocus) {
         List<Channel> filtered = new ArrayList<>();
         for (Channel channel : allChannels) {
-            if (filter == 1 && !channel.isFreeToAir()) {
-                continue;
-            }
-            if (filter == 2 && !isHd(channel)) {
-                continue;
-            }
-            if (filter == 3 && !favourites.contains(channel.getNumber())) {
+            if (favouritesOnly && !favourites.contains(channel.getNumber())) {
                 continue;
             }
             filtered.add(channel);
@@ -433,9 +426,9 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
         status.setText(getString(fromCache
                 ? R.string.channels_source_cached : R.string.channels_source_live));
         if (filtered.isEmpty()) {
-            emptyText.setText(filter == 3 && !favouritesKnown
-                    ? R.string.channels_favourites_sign_in
-                    : filter == 3 ? R.string.channels_empty_favourites
+            emptyText.setText(favouritesOnly
+                    ? (favouritesKnown ? R.string.channels_empty_favourites
+                            : R.string.channels_favourites_sign_in)
                     : R.string.channels_empty_filter);
             emptyState.setVisibility(View.VISIBLE);
             progress.setVisibility(View.GONE);
@@ -451,15 +444,6 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
                 focusPosition(0);
             }
         }
-    }
-
-    private static boolean isHd(Channel channel) {
-        String quality = channel.getQuality();
-        if (TextUtils.isEmpty(quality)) {
-            return false;
-        }
-        String upper = quality.toUpperCase(java.util.Locale.US);
-        return upper.contains("HD") || upper.contains("4K") || upper.contains("UHD");
     }
 
     private void load(boolean forceRefresh) {
@@ -486,7 +470,7 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
             applyServerOrder();
         }
         boolean same = adapter.hasSameContent(allChannels);
-        if (!same || filter != 0) {
+        if (!same || favouritesOnly) {
             applyFilter(false);
         } else {
             status.setText(getString(fromCache
@@ -606,10 +590,6 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
                 if (!reorderMode) {
                     applyServerOrder();
                 }
-                if (openFavourites && filter != 3) {
-                    filter = 3;
-                    updateChips();
-                }
                 applyFilter(false);
             }
 
@@ -617,7 +597,7 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
             public void onError(ApiException error) {
                 accountLoading = false;
                 favouritesKnown = false;
-                if (filter == 3) {
+                if (favouritesOnly) {
                     applyFilter(false);
                 }
             }
@@ -728,9 +708,9 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
         }
         reorderMode = true;
         reorderSnapshot = new ArrayList<>(allChannels);
-        if (filter != 0) {
-            filter = 0;
-            updateChips();
+        if (favouritesOnly) {
+            favouritesOnly = false;
+            updateFilterChip();
         }
         applyFilter(false);
         reorderPosition = grid.hasFocus() && grid.getFocusedChild() != null
@@ -851,9 +831,15 @@ public final class ChannelListActivity extends BaseActivity implements ChannelRe
         });
     }
 
+    /** The same header button means "options" normally and "save" while reordering. */
     private void updateOptionsLabel() {
-        optionsAction.setText(getString(reorderMode
+        optionsAction.setContentDescription(getString(reorderMode
                 ? R.string.channels_options_done : R.string.channels_options));
+        if (optionsAction.getChildCount() > 0
+                && optionsAction.getChildAt(0) instanceof android.widget.ImageView) {
+            ((android.widget.ImageView) optionsAction.getChildAt(0)).setImageResource(
+                    reorderMode ? R.drawable.ic_check : R.drawable.ic_settings);
+        }
     }
 
     @Override

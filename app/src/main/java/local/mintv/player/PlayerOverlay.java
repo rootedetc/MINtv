@@ -28,11 +28,12 @@ import local.mintv.ui.Tv;
 
 /**
  * Picture-first player chrome: a quiet channel identity at the top-left, one transport plate
- * at the bottom, a compact channel switcher and a playback settings sheet.
+ * at the bottom, a compact channel switcher (UP or OK) and a playback settings sheet (DOWN).
  *
- * <p>Nothing shows a quality <em>preference</em>: both the identity state row and the STREAM
- * readout in the transport plate show the resolution the decoder is actually producing.
- * Quality, subtitles and audio language are changed in the settings sheet (DOWN), never by
+ * <p>Channels are changed only by picking one in the switcher; there is no picture-interrupting
+ * UP/DOWN zapping. Nothing shows a quality <em>preference</em>: both the identity state row and
+ * the STREAM readout in the transport plate show the resolution the decoder is actually
+ * producing. Quality, subtitles and audio language are changed in the settings sheet, never by
  * re-tuning the stream.</p>
  */
 public final class PlayerOverlay {
@@ -55,8 +56,6 @@ public final class PlayerOverlay {
     }
 
     public interface Callback {
-        void onZap(int delta);
-
         void onChannelPicked(Channel channel);
 
         void onPlayPause();
@@ -792,17 +791,8 @@ public final class PlayerOverlay {
     private boolean handleHidden(int code) {
         switch (code) {
             case KeyEvent.KEYCODE_CHANNEL_UP:
-                fireZap(1);
-                return true;
             case KeyEvent.KEYCODE_CHANNEL_DOWN:
-                fireZap(-1);
-                return true;
             case KeyEvent.KEYCODE_DPAD_UP:
-                fireZap(1);
-                return true;
-            case KeyEvent.KEYCODE_DPAD_DOWN:
-                fireZap(-1);
-                return true;
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
@@ -810,6 +800,10 @@ public final class PlayerOverlay {
                 if (!channels.isEmpty()) {
                     openSwitcher();
                 }
+                return true;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                show();
+                openSettings();
                 return true;
             case KeyEvent.KEYCODE_BACK:
             case KeyEvent.KEYCODE_DPAD_LEFT:
@@ -823,9 +817,11 @@ public final class PlayerOverlay {
 
     private boolean handleVisible(int code) {
         if (code == KeyEvent.KEYCODE_CHANNEL_UP || code == KeyEvent.KEYCODE_CHANNEL_DOWN) {
-            closeSwitcher(false);
-            closeSettings(false);
-            fireZap(code == KeyEvent.KEYCODE_CHANNEL_UP ? 1 : -1);
+            if (switcherOpen) {
+                moveSwitcher(code == KeyEvent.KEYCODE_CHANNEL_UP ? -1 : 1);
+            } else {
+                openSwitcher();
+            }
             return true;
         }
         if (settingsOpen) {
@@ -836,8 +832,7 @@ public final class PlayerOverlay {
         }
         switch (code) {
             case KeyEvent.KEYCODE_DPAD_UP:
-                scheduleHide();
-                fireZap(1);
+                openSwitcher();
                 return true;
             case KeyEvent.KEYCODE_DPAD_DOWN:
                 openSettings();
@@ -950,13 +945,6 @@ public final class PlayerOverlay {
                 || code == KeyEvent.KEYCODE_NUMPAD_ENTER
                 || code == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
                 || code == KeyEvent.KEYCODE_HEADSETHOOK;
-    }
-
-    private void fireZap(int delta) {
-        Callback target = callback;
-        if (target != null) {
-            target.onZap(delta);
-        }
     }
 
     private void firePlayPause() {

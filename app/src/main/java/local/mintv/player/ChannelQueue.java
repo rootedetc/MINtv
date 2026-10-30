@@ -6,7 +6,7 @@ import java.util.List;
 import local.mintv.data.Channel;
 
 /**
- * The ordered channel list the player zaps through with CH+/CH-.
+ * The ordered channel list shown in the player's channel switcher.
  *
  * <p>Kept as process-wide state on purpose: the player is a separate activity and the list
  * is large (247 entries), so passing it through an Intent would mean a TransactionTooLarge
@@ -29,16 +29,6 @@ public final class ChannelQueue {
         return index >= 0 && index < channels.size() ? channels.get(index) : null;
     }
 
-    /** Moves by {@code delta} with wraparound and returns the new channel, or null. */
-    public static Channel step(int delta) {
-        if (channels.isEmpty() || index < 0) {
-            return null;
-        }
-        int size = channels.size();
-        index = ((index + delta) % size + size) % size;
-        return channels.get(index);
-    }
-
     /** Alias used by the overlay. */
     public static List<Channel> channels() {
         return channels;
@@ -52,9 +42,5 @@ public final class ChannelQueue {
     /** Index of the current channel, or -1. */
     public static int index() {
         return index;
-    }
-
-    public static boolean hasNext() {
-        return channels.size() > 1 && index >= 0;
     }
 }

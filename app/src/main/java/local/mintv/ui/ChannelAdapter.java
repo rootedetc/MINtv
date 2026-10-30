@@ -37,6 +37,7 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
     private OnChannelLongClick longClickListener;
     private int spanCount = 6;
     private int railFocusId = View.NO_ID;
+    private int headerFocusId = View.NO_ID;
     private java.util.Set<Integer> favourites = java.util.Collections.emptySet();
     private boolean favouriteKnown;
     private java.util.Set<Integer> subscriptions = java.util.Collections.emptySet();
@@ -75,6 +76,11 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
 
     public void setRailFocusId(int railFocusId) {
         this.railFocusId = railFocusId;
+    }
+
+    /** Where UP goes from the first grid row (the filter chip in the header). */
+    public void setHeaderFocusId(int headerFocusId) {
+        this.headerFocusId = headerFocusId;
     }
 
     @SuppressLint("NotifyDataSetChanged")
@@ -148,7 +154,7 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
 
     @Override
     public void onBindViewHolder(@NonNull ChannelHolder holder, int position) {
-        holder.bind(channels.get(position), position, spanCount, railFocusId,
+        holder.bind(channels.get(position), position, spanCount, railFocusId, headerFocusId,
                 favourites, favouriteKnown, subscriptions, subscriptionKnown, longClickListener);
     }
 
@@ -198,7 +204,7 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
         }
 
         void bind(Channel newChannel, int position, int spanCount, int railFocusId,
-                  java.util.Set<Integer> favourites, boolean favouriteKnown,
+                  int headerFocusId, java.util.Set<Integer> favourites, boolean favouriteKnown,
                   java.util.Set<Integer> subscriptions, boolean subscriptionKnown,
                   OnChannelLongClick longClickListener) {
             this.channel = newChannel;
@@ -262,6 +268,13 @@ public final class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.Ch
                 itemView.setNextFocusLeftId(railFocusId);
             } else {
                 itemView.setNextFocusLeftId(View.NO_ID);
+            }
+            // Only the first row climbs to the header; later rows keep the geometric UP
+            // so they still move to the row above.
+            if (position < spanCount && headerFocusId != View.NO_ID) {
+                itemView.setNextFocusUpId(headerFocusId);
+            } else {
+                itemView.setNextFocusUpId(View.NO_ID);
             }
 
             ImageLoader.load(logo, newChannel.getLogoUrl());
